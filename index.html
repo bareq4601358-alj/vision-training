@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vision Training</title>
+  <style>
+    body { margin:0; background:#08080c; overflow:hidden; font-family:Arial; }
+    canvas { display:block; }
+    #top-right { position: absolute; top: 25px; right: 30px; color:#ccc; font-size:20px; z-index:10; }
+    #left-sliders { position: absolute; bottom: 50px; left: 50px; display: flex; flex-direction: column; gap: 35px; z-index:10; }
+    #bottom-arrows { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); display: flex; gap: 80px; z-index:10; }
+    button {
+      background: rgba(80,80,90,0.3); color: rgba(255,255,255,0.6); border: none;
+      font-size: 28px; width: 55px; height: 55px; border-radius: 50%; cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover { background: rgba(80,80,90,0.95); color: white; transform: scale(1.1); }
+    label { color:#ccc; font-size:18px; display:block; margin-bottom:5px; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="top-right">Routine: <span id="routineName">Circle</span></div>
+  <div id="left-sliders">
+    <div><label>Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0" style="width:260px"></div>
+    <div><label>Size</label><input type="range" id="size" min="12" max="52" step="1" value="28" style="width:260px"></div>
+  </div>
+  <div id="bottom-arrows">
+    <button id="prev">←</button>
+    <button id="next">→</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+    window.addEventListener('resize', () => {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    });
+
+    let current = 0;
+    let speed = 2.0;
+    let dotSize = 28;
+    let paused = false;
+    let time = 0;
+    let x = W/2, y = H/2;
+
+    let zigzagY = H*0.3, zigzagDir = 1, zigzagProgress = 0;
+    let vzigzagX = W*0.3, vzigzagDir = 1, vzigzagProgress = 0;
+
+    let hBalls = [], hCurrent = 0, hGoingDown = true;
+    let vBalls = [], vCurrent = 0, vGoingDown = true;
+    let r2TargetX = W/2, r2TargetY = H/2;
+
+    const routines = [
+      "Circle", "Counter Circle", "Horizontal", "Vertical",
+      "Diagonal TL-BR", "Diagonal TR-BL",
+      "Figure 8 Horizontal", "Figure 8 Vertical",
+      "Random", "Random 2", "Zigzag", "Vertical Zigzag",
+      "Horizontal Saccades", "Vertical Saccades"
+    ];
+
+    document.getElementById('routineName').textContent = routines[current];
+
+    document.getElementById('speed').addEventListener('input', e => speed = +e.target.value);
+    document.getElementById('size').addEventListener('input', e => dotSize = +e.target.value);
+    document.getElementById('next').onclick = () => { current = (current + 1) % routines.length; resetRoutine(); };
+    document.getElementById('prev').onclick = () => { current = (current - 1 + routines.length) % routines.length; resetRoutine(); };
+
+    function resetRoutine() {
+      time = 0;
+      x = W/2; y = H/2;
+      document.getElementById('routineName').textContent = routines[current];
+
+      if (routines[current] === "Horizontal Saccades") {
+        hBalls = [];
+        for (let i = 0; i < 7; i++) {
+          let dir = (i % 2 === 0) ? -1 : 1;
+          hBalls.push({x: dir === -1 ? W-100 : 100, y: H*(0.15 + i*0.1), dir: dir});
+        }
+        hCurrent = 0;
+        hGoingDown = true;
+      }
+      if (routines[current] === "Vertical Saccades") {
+        vBalls = [];
+        for (let i = 0; i < 9; i++) {
+          let dir = (i % 2 === 0) ? 1 : -1;
+          vBalls.push({x: W*(0.1 + i*0.1), y: dir === 1 ? 100 : H-100, dir: dir});
+        }
+        vCurrent = 0;
+        vGoingDown = true;
+      }
+    }
+
+    function drawBall(px, py) {
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = "#ff6666";
+      ctx.fillStyle = "#c81414";
+      ctx.beginPath();
+      ctx.arc(px, py, dotSize, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(px, py, dotSize/2, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    function update() {
+      time += 0.016 * speed;
+      const cx = W/2;
+      const cy = H/2;
+      const s = speed;
+
+      // ==================== SAFE SACCADES ====================
+      if (routines[current] === "Horizontal Saccades" && hBalls.length > 0 && hCurrent < hBalls.length) {
+        let ball = hBalls[hCurrent];
+        ball.x += 850 * s * ball.dir * 0.016;
+
+        if ((ball.dir === -1 && ball.x <= 80) || (ball.dir === 1 && ball.x >= W-80)) {
+          ball.x = Math.max(80, Math.min(W-80, ball.x));
+          ball.dir *= -1;
+
+          if (hGoingDown) {
+            hCurrent = Math.min(hCurrent + 1, hBalls.length - 1);
+            if (hCurrent === hBalls.length - 1) hGoingDown = false;
+          } else {
+            hCurrent = Math.max(hCurrent - 1, 0);
+            if (hCurrent === 0) hGoingDown = true;
+          }
+        }
+      } 
+      else if (routines[current] === "Vertical Saccades" && vBalls.length > 0 && vCurrent < vBalls.length) {
+        let ball = vBalls[vCurrent];
+        ball.y += 850 * s * ball.dir * 0.016;
+
+        if ((ball.dir === 1 && ball.y >= H-80) || (ball.dir === -1 && ball.y <= 80)) {
+          ball.y = Math.max(80, Math.min(H-80, ball.y));
+          ball.dir *= -1;
+
+          if (vGoingDown) {
+            vCurrent = Math.min(vCurrent + 1, vBalls.length - 1);
+            if (vCurrent === vBalls.length - 1) vGoingDown = false;
+          } else {
+            vCurrent = Math.max(vCurrent - 1, 0);
+            if (vCurrent === 0) vGoingDown = true;
+          }
+        }
+      } 
+      // ==================== ALL OTHER ROUTINES (UNCHANGED) ====================
+      else if (routines[current] === "Circle") {
+        x = cx + 380 * Math.cos(time * 2.8);
+        y = cy + 380 * Math.sin(time * 2.8);
+      } else if (routines[current] === "Counter Circle") {
+        x = cx + 380 * Math.cos(-time * 2.8);
+        y = cy + 380 * Math.sin(-time * 2.8);
+      } else if (routines[current] === "Horizontal") {
+        x = cx + (W * 0.48) * Math.sin(time * 2.5);
+        y = cy;
+      } else if (routines[current] === "Vertical") {
+        x = cx;
+        y = cy + (H * 0.48) * Math.sin(time * 2.5);
+      } else if (routines[current] === "Figure 8 Horizontal") {
+        x = cx + 420 * Math.sin(time * 1.6);
+        y = cy + 320 * Math.sin(2 * time * 1.6);
+      } else if (routines[current] === "Figure 8 Vertical") {
+        x = cx + 380 * Math.sin(2 * time * 1.6);
+        y = cy + 280 * Math.sin(time * 1.6);
+      } else if (routines[current] === "Diagonal TL-BR") {
+        x = cx + (W * 0.46) * Math.sin(time * 2.2);
+        y = cy + (H * 0.46) * Math.sin(time * 2.2);
+      } else if (routines[current] === "Diagonal TR-BL") {
+        x = cx + (W * 0.46) * Math.sin(time * 2.2);
+        y = cy - (H * 0.46) * Math.sin(time * 2.2);
+      } else if (routines[current] === "Zigzag") {
+        zigzagProgress += speed * 1.9 * 0.016;
+        x = cx + (W*0.48) * Math.sin(zigzagProgress);
+        zigzagY += 36 * zigzagDir * s * 0.016;
+        y = zigzagY;
+        if (y < 60 || y > H-60) zigzagDir *= -1;
+      } else if (routines[current] === "Vertical Zigzag") {
+        zigzagProgress += speed * 1.9 * 0.016;
+        y = cy + (H*0.48) * Math.sin(zigzagProgress);
+        vzigzagX += 36 * vzigzagDir * s * 0.016;
+        x = vzigzagX;
+        if (x < 60 || x > W-60) vzigzagDir *= -1;
+      } else if (routines[current] === "Random 2") {
+        if (Math.random() < 0.025) {
+          r2TargetX = Math.random() * (W - 200) + 100;
+          r2TargetY = Math.random() * (H - 200) + 100;
+        }
+        x = x * 0.78 + r2TargetX * 0.22;
+        y = y * 0.78 + r2TargetY * 0.22;
+      } else if (routines[current] === "Random") {
+        if (Math.random() < 0.015) {
+          x = Math.random() * (W - 200) + 100;
+          y = Math.random() * (H - 200) + 100;
+        }
+      }
+    }
+
+    function draw() {
+      ctx.fillStyle = "#08080c";
+      ctx.fillRect(0, 0, W, H);
+
+      if (routines[current] === "Horizontal Saccades" && hBalls.length > 0) {
+        hBalls.forEach(b => drawBall(b.x, b.y));
+      } else if (routines[current] === "Vertical Saccades" && vBalls.length > 0) {
+        vBalls.forEach(b => drawBall(b.x, b.y));
+      } else {
+        drawBall(x, y);
+      }
+    }
+
+    function loop() {
+      if (!paused) update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('keydown', e => {
+      if (e.key === "ArrowRight") { current = (current + 1) % routines.length; resetRoutine(); }
+      if (e.key === "ArrowLeft") { current = (current - 1 + routines.length) % routines.length; resetRoutine(); }
+      if (e.key === " ") paused = !paused;
+      if (e.key === "ArrowUp") { speed = Math.min(12, speed + 0.2); document.getElementById('speed').value = speed; }
+      if (e.key === "ArrowDown") { speed = Math.max(0.5, speed - 0.2); document.getElementById('speed').value = speed; }
+    });
+
+    resetRoutine();
+    loop();
+  </script>
+</body>
+</html>
