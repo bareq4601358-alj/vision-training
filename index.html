@@ -6,9 +6,13 @@
   <style>
     body { margin:0; background:#08080c; overflow:hidden; font-family:Arial; }
     canvas { display:block; }
-    #top-right { position: absolute; top: 25px; right: 30px; color:#ccc; font-size:20px; z-index:10; }
+    #top-right { 
+      position: absolute; top: 25px; right: 30px; color:#ccc; 
+      font-size:20px; z-index:10; 
+    }
     #left-sliders { position: absolute; bottom: 50px; left: 50px; display: flex; flex-direction: column; gap: 35px; z-index:10; }
     #bottom-arrows { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); display: flex; gap: 80px; z-index:10; }
+    
     button {
       background: rgba(80,80,90,0.3); color: rgba(255,255,255,0.6); border: none;
       font-size: 28px; width: 55px; height: 55px; border-radius: 50%; cursor: pointer;
@@ -16,15 +20,68 @@
     }
     button:hover { background: rgba(80,80,90,0.95); color: white; transform: scale(1.1); }
     label { color:#ccc; font-size:18px; display:block; margin-bottom:5px; }
+
+    /* Slider Styling - Blue fill on left */
+    input[type="range"] {
+      -webkit-appearance: none;
+      height: 8px;
+      width: 260px;
+      background: #2a2a3a;
+      border-radius: 5px;
+      outline: none;
+    }
+
+    /* Chrome & Safari */
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: #2a2a3a;
+      border-radius: 5px;
+      height: 8px;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #4a9eff;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 12px #4a9eff;
+      margin-top: -6px;
+    }
+
+    /* Firefox */
+    input[type="range"]::-moz-range-track {
+      background: #2a2a3a;
+      border-radius: 5px;
+      height: 8px;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: #4a9eff;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 12px #4a9eff;
+    }
+
+    /* Dynamic blue fill */
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: linear-gradient(to right, 
+        #4a9eff var(--value-percent), 
+        #2a2a3a var(--value-percent));
+    }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
-  <div id="top-right">Routine: <span id="routineName">Circle</span></div>
+  <div id="top-right">Routine: <span id="routineName">Circle</span> | Speed: <span id="speedDisplay">2.0</span></div>
+  
   <div id="left-sliders">
     <div><label>Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0" style="width:260px"></div>
     <div><label>Size</label><input type="range" id="size" min="12" max="52" step="1" value="28" style="width:260px"></div>
   </div>
+
   <div id="bottom-arrows">
     <button id="prev">←</button>
     <button id="next">→</button>
@@ -35,6 +92,7 @@
     const ctx = canvas.getContext('2d');
     let W = canvas.width = window.innerWidth;
     let H = canvas.height = window.innerHeight;
+
     window.addEventListener('resize', () => {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
@@ -49,10 +107,15 @@
 
     let zigzagY = H*0.3, zigzagDir = 1, zigzagProgress = 0;
     let vzigzagX = W*0.3, vzigzagDir = 1, vzigzagProgress = 0;
-
-    let hBalls = [], hCurrent = 0, hGoingDown = true;
-    let vBalls = [], vCurrent = 0, vGoingDown = true;
     let r2TargetX = W/2, r2TargetY = H/2;
+
+    let hBalls = [], hCurrent = 0;
+    let vBalls = [], vCurrent = 0;
+    let hDirection = 1;
+    let vDirection = 1;
+
+    let lastRandomJump = 0;
+    let lastR2Change = 0;
 
     const routines = [
       "Circle", "Counter Circle", "Horizontal", "Vertical",
@@ -62,35 +125,61 @@
       "Horizontal Saccades", "Vertical Saccades"
     ];
 
-    document.getElementById('routineName').textContent = routines[current];
+    const routineNameEl = document.getElementById('routineName');
+    const speedDisplayEl = document.getElementById('speedDisplay');
+    const speedSlider = document.getElementById('speed');
+    const sizeSlider = document.getElementById('size');
 
-    document.getElementById('speed').addEventListener('input', e => speed = +e.target.value);
-    document.getElementById('size').addEventListener('input', e => dotSize = +e.target.value);
+    // Update slider fill
+    function updateSliderFill(slider) {
+      const percent = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+      slider.style.setProperty('--value-percent', percent + '%');
+    }
+
+    speedSlider.addEventListener('input', e => {
+      speed = +e.target.value;
+      speedDisplayEl.textContent = speed.toFixed(1);
+      updateSliderFill(speedSlider);
+    });
+
+    sizeSlider.addEventListener('input', e => {
+      dotSize = +e.target.value;
+      updateSliderFill(sizeSlider);
+    });
+
     document.getElementById('next').onclick = () => { current = (current + 1) % routines.length; resetRoutine(); };
     document.getElementById('prev').onclick = () => { current = (current - 1 + routines.length) % routines.length; resetRoutine(); };
 
     function resetRoutine() {
       time = 0;
       x = W/2; y = H/2;
-      document.getElementById('routineName').textContent = routines[current];
+      lastRandomJump = 0;
+      lastR2Change = 0;
+      r2TargetX = W/2; r2TargetY = H/2;
+      zigzagProgress = 0; zigzagY = H*0.3; zigzagDir = 1;
+      vzigzagProgress = 0; vzigzagX = W*0.3; vzigzagDir = 1;
+
+      routineNameEl.textContent = routines[current];
+
+      hDirection = 1;
+      vDirection = 1;
 
       if (routines[current] === "Horizontal Saccades") {
         hBalls = [];
         for (let i = 0; i < 7; i++) {
-          let dir = (i % 2 === 0) ? -1 : 1;
-          hBalls.push({x: dir === -1 ? W-100 : 100, y: H*(0.15 + i*0.1), dir: dir});
+          let startX = (i % 2 === 0) ? W*0.82 : W*0.18;
+          hBalls.push({x: startX, y: H*(0.15 + i*0.11), dir: (i % 2 === 0) ? -1 : 1});
         }
         hCurrent = 0;
-        hGoingDown = true;
       }
+
       if (routines[current] === "Vertical Saccades") {
         vBalls = [];
         for (let i = 0; i < 9; i++) {
-          let dir = (i % 2 === 0) ? 1 : -1;
-          vBalls.push({x: W*(0.1 + i*0.1), y: dir === 1 ? 100 : H-100, dir: dir});
+          let startY = (i % 2 === 0) ? H*0.85 : H*0.15;
+          vBalls.push({x: W*(0.18 + i*0.08), y: startY, dir: (i % 2 === 0) ? -1 : 1});
         }
         vCurrent = 0;
-        vGoingDown = true;
       }
     }
 
@@ -114,90 +203,101 @@
       const cy = H/2;
       const s = speed;
 
-      // ==================== SAFE SACCADES ====================
-      if (routines[current] === "Horizontal Saccades" && hBalls.length > 0 && hCurrent < hBalls.length) {
+      if (routines[current] === "Horizontal Saccades" && hBalls.length > 0) {
         let ball = hBalls[hCurrent];
-        ball.x += 850 * s * ball.dir * 0.016;
+        ball.x += 720 * s * ball.dir * 0.016;
+        const leftLimit = W*0.18;
+        const rightLimit = W*0.82;
 
-        if ((ball.dir === -1 && ball.x <= 80) || (ball.dir === 1 && ball.x >= W-80)) {
-          ball.x = Math.max(80, Math.min(W-80, ball.x));
+        if ((ball.dir === -1 && ball.x <= leftLimit) || (ball.dir === 1 && ball.x >= rightLimit)) {
+          ball.x = ball.dir === -1 ? leftLimit : rightLimit;
           ball.dir *= -1;
+          hCurrent += hDirection;
 
-          if (hGoingDown) {
-            hCurrent = Math.min(hCurrent + 1, hBalls.length - 1);
-            if (hCurrent === hBalls.length - 1) hGoingDown = false;
-          } else {
-            hCurrent = Math.max(hCurrent - 1, 0);
-            if (hCurrent === 0) hGoingDown = true;
+          if (hCurrent >= hBalls.length || hCurrent < 0) {
+            hDirection *= -1;
+            hCurrent += hDirection;
           }
         }
-      } 
-      else if (routines[current] === "Vertical Saccades" && vBalls.length > 0 && vCurrent < vBalls.length) {
+      }
+      else if (routines[current] === "Vertical Saccades" && vBalls.length > 0) {
         let ball = vBalls[vCurrent];
-        ball.y += 850 * s * ball.dir * 0.016;
+        ball.y += 720 * s * ball.dir * 0.016;
+        const topLimit = H*0.15;
+        const bottomLimit = H*0.85;
 
-        if ((ball.dir === 1 && ball.y >= H-80) || (ball.dir === -1 && ball.y <= 80)) {
-          ball.y = Math.max(80, Math.min(H-80, ball.y));
+        if ((ball.dir === 1 && ball.y >= bottomLimit) || (ball.dir === -1 && ball.y <= topLimit)) {
+          ball.y = ball.dir === 1 ? bottomLimit : topLimit;
           ball.dir *= -1;
+          vCurrent += vDirection;
 
-          if (vGoingDown) {
-            vCurrent = Math.min(vCurrent + 1, vBalls.length - 1);
-            if (vCurrent === vBalls.length - 1) vGoingDown = false;
-          } else {
-            vCurrent = Math.max(vCurrent - 1, 0);
-            if (vCurrent === 0) vGoingDown = true;
+          if (vCurrent >= vBalls.length || vCurrent < 0) {
+            vDirection *= -1;
+            vCurrent += vDirection;
           }
         }
-      } 
-      // ==================== ALL OTHER ROUTINES (UNCHANGED) ====================
+      }
       else if (routines[current] === "Circle") {
-        x = cx + 380 * Math.cos(time * 2.8);
-        y = cy + 380 * Math.sin(time * 2.8);
-      } else if (routines[current] === "Counter Circle") {
-        x = cx + 380 * Math.cos(-time * 2.8);
-        y = cy + 380 * Math.sin(-time * 2.8);
-      } else if (routines[current] === "Horizontal") {
+        x = cx + 260 * Math.cos(time * 2.8);
+        y = cy + 260 * Math.sin(time * 2.8);
+      } 
+      else if (routines[current] === "Counter Circle") {
+        x = cx + 260 * Math.cos(-time * 2.8);
+        y = cy + 260 * Math.sin(-time * 2.8);
+      } 
+      else if (routines[current] === "Horizontal") {
         x = cx + (W * 0.48) * Math.sin(time * 2.5);
         y = cy;
-      } else if (routines[current] === "Vertical") {
+      } 
+      else if (routines[current] === "Vertical") {
         x = cx;
         y = cy + (H * 0.48) * Math.sin(time * 2.5);
-      } else if (routines[current] === "Figure 8 Horizontal") {
+      } 
+      else if (routines[current] === "Figure 8 Horizontal") {
         x = cx + 420 * Math.sin(time * 1.6);
         y = cy + 320 * Math.sin(2 * time * 1.6);
-      } else if (routines[current] === "Figure 8 Vertical") {
+      } 
+      else if (routines[current] === "Figure 8 Vertical") {
         x = cx + 380 * Math.sin(2 * time * 1.6);
         y = cy + 280 * Math.sin(time * 1.6);
-      } else if (routines[current] === "Diagonal TL-BR") {
+      } 
+      else if (routines[current] === "Diagonal TL-BR") {
         x = cx + (W * 0.46) * Math.sin(time * 2.2);
         y = cy + (H * 0.46) * Math.sin(time * 2.2);
-      } else if (routines[current] === "Diagonal TR-BL") {
+      } 
+      else if (routines[current] === "Diagonal TR-BL") {
         x = cx + (W * 0.46) * Math.sin(time * 2.2);
         y = cy - (H * 0.46) * Math.sin(time * 2.2);
-      } else if (routines[current] === "Zigzag") {
+      } 
+      else if (routines[current] === "Zigzag") {
         zigzagProgress += speed * 1.9 * 0.016;
         x = cx + (W*0.48) * Math.sin(zigzagProgress);
         zigzagY += 36 * zigzagDir * s * 0.016;
         y = zigzagY;
         if (y < 60 || y > H-60) zigzagDir *= -1;
-      } else if (routines[current] === "Vertical Zigzag") {
+      } 
+      else if (routines[current] === "Vertical Zigzag") {
         zigzagProgress += speed * 1.9 * 0.016;
         y = cy + (H*0.48) * Math.sin(zigzagProgress);
         vzigzagX += 36 * vzigzagDir * s * 0.016;
         x = vzigzagX;
         if (x < 60 || x > W-60) vzigzagDir *= -1;
-      } else if (routines[current] === "Random 2") {
-        if (Math.random() < 0.025) {
-          r2TargetX = Math.random() * (W - 200) + 100;
-          r2TargetY = Math.random() * (H - 200) + 100;
+      } 
+      else if (routines[current] === "Random") {
+        if (time - lastRandomJump > 1.9 / speed) {
+          x = 120 + Math.random() * (W - 240);
+          y = 120 + Math.random() * (H - 240);
+          lastRandomJump = time;
+        }
+      } 
+      else if (routines[current] === "Random 2") {
+        if (time - lastR2Change > 2.1 / speed) {
+          r2TargetX = 120 + Math.random() * (W - 240);
+          r2TargetY = 120 + Math.random() * (H - 240);
+          lastR2Change = time;
         }
         x = x * 0.78 + r2TargetX * 0.22;
         y = y * 0.78 + r2TargetY * 0.22;
-      } else if (routines[current] === "Random") {
-        if (Math.random() < 0.015) {
-          x = Math.random() * (W - 200) + 100;
-          y = Math.random() * (H - 200) + 100;
-        }
       }
     }
 
@@ -224,10 +324,23 @@
       if (e.key === "ArrowRight") { current = (current + 1) % routines.length; resetRoutine(); }
       if (e.key === "ArrowLeft") { current = (current - 1 + routines.length) % routines.length; resetRoutine(); }
       if (e.key === " ") paused = !paused;
-      if (e.key === "ArrowUp") { speed = Math.min(12, speed + 0.2); document.getElementById('speed').value = speed; }
-      if (e.key === "ArrowDown") { speed = Math.max(0.5, speed - 0.2); document.getElementById('speed').value = speed; }
+      if (e.key === "ArrowUp") {
+        speed = Math.min(12, speed + 0.2);
+        speedSlider.value = speed;
+        speedDisplayEl.textContent = speed.toFixed(1);
+        updateSliderFill(speedSlider);
+      }
+      if (e.key === "ArrowDown") {
+        speed = Math.max(0.5, speed - 0.2);
+        speedSlider.value = speed;
+        speedDisplayEl.textContent = speed.toFixed(1);
+        updateSliderFill(speedSlider);
+      }
     });
 
+    // Initialize slider fills
+    updateSliderFill(speedSlider);
+    updateSliderFill(sizeSlider);
     resetRoutine();
     loop();
   </script>
