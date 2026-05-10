@@ -12,7 +12,7 @@
     }
     #left-sliders { position: absolute; bottom: 50px; left: 50px; display: flex; flex-direction: column; gap: 35px; z-index:10; }
     #bottom-arrows { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); display: flex; gap: 80px; z-index:10; }
-   
+  
     button {
       background: rgba(80,80,90,0.3); color: rgba(255,255,255,0.6); border: none;
       font-size: 28px; width: 55px; height: 55px; border-radius: 50%; cursor: pointer;
@@ -20,7 +20,6 @@
     }
     button:hover { background: rgba(80,80,90,0.95); color: white; transform: scale(1.1); }
     label { color:#ccc; font-size:18px; display:block; margin-bottom:5px; }
-
     input[type="range"] {
       -webkit-appearance: none;
       height: 8px;
@@ -65,28 +64,23 @@
 <body>
   <canvas id="game"></canvas>
   <div id="top-right">Routine: <span id="routineName">Circle</span> | Speed: <span id="speedDisplay">2.0</span></div>
- 
   <div id="left-sliders">
     <div><label>Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0" style="width:260px"></div>
     <div><label>Size</label><input type="range" id="size" min="12" max="52" step="1" value="28" style="width:260px"></div>
   </div>
-
   <div id="bottom-arrows">
     <button id="prev">←</button>
     <button id="next">→</button>
   </div>
-
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d', { alpha: true });
     let W = canvas.width = window.innerWidth;
     let H = canvas.height = window.innerHeight;
-
     window.addEventListener('resize', () => {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
     });
-
     let current = 0;
     let speed = 2.0;
     let dotSize = 28;
@@ -102,7 +96,6 @@
     let vDirection = 1;
     let lastRandomJump = 0;
     let lastR2Change = 0;
-
     const routines = [
       "Circle", "Counter Circle", "Horizontal", "Vertical",
       "Diagonal TL-BR", "Diagonal TR-BL",
@@ -110,31 +103,25 @@
       "Random", "Random 2", "Zigzag", "Vertical Zigzag",
       "Horizontal Saccades", "Vertical Saccades"
     ];
-
     const routineNameEl = document.getElementById('routineName');
     const speedDisplayEl = document.getElementById('speedDisplay');
     const speedSlider = document.getElementById('speed');
     const sizeSlider = document.getElementById('size');
-
     function updateSliderFill(slider) {
       const percent = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
       slider.style.setProperty('--value-percent', percent + '%');
     }
-
     speedSlider.addEventListener('input', e => {
       speed = +e.target.value;
       speedDisplayEl.textContent = speed.toFixed(1);
       updateSliderFill(speedSlider);
     });
-
     sizeSlider.addEventListener('input', e => {
       dotSize = +e.target.value;
       updateSliderFill(sizeSlider);
     });
-
     document.getElementById('next').onclick = () => { current = (current + 1) % routines.length; resetRoutine(); };
     document.getElementById('prev').onclick = () => { current = (current - 1 + routines.length) % routines.length; resetRoutine(); };
-
     function resetRoutine() {
       time = 0;
       x = W/2; y = H/2;
@@ -143,11 +130,9 @@
       r2TargetX = W/2; r2TargetY = H/2;
       zigzagProgress = 0; zigzagY = H*0.3; zigzagDir = 1;
       vzigzagProgress = 0; vzigzagX = W*0.3; vzigzagDir = 1;
-
       routineNameEl.textContent = routines[current];
       hDirection = 1;
       vDirection = 1;
-
       if (routines[current] === "Horizontal Saccades") {
         hBalls = [];
         for (let i = 0; i < 7; i++) {
@@ -156,7 +141,6 @@
         }
         hCurrent = 0;
       }
-
       if (routines[current] === "Vertical Saccades") {
         vBalls = [];
         for (let i = 0; i < 9; i++) {
@@ -166,30 +150,30 @@
         vCurrent = 0;
       }
     }
-
     function drawBall(px, py) {
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = "transparent";
+      // Much stronger reduction at high speeds
+      let blurAmount = 24 - speed * 2.4;
+      if (blurAmount < 0.5) blurAmount = 0;
 
-      // Softer glow to reduce trail
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = blurAmount;
       ctx.shadowColor = "#ff6666";
+      
       ctx.fillStyle = "#c81414";
       ctx.beginPath();
       ctx.arc(px, py, dotSize, 0, Math.PI*2);
       ctx.fill();
 
+      // Inner white dot
       ctx.shadowBlur = 0;
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
-      ctx.arc(px, py, dotSize/2, 0, Math.PI*2);
+      ctx.arc(px, py, dotSize * 0.48, 0, Math.PI*2);
       ctx.fill();
     }
-
     function draw() {
       ctx.fillStyle = "#08080c";
-      ctx.fillRect(0, 0, W, H);        // Strong clear
-
+      ctx.fillRect(0, 0, W, H);
+      
       if (routines[current] === "Horizontal Saccades" && hBalls.length > 0) {
         hBalls.forEach(b => drawBall(b.x, b.y));
       } else if (routines[current] === "Vertical Saccades" && vBalls.length > 0) {
@@ -198,7 +182,6 @@
         drawBall(x, y);
       }
     }
-
     function update() {
       time += 0.016 * speed;
       const cx = W/2;
@@ -236,12 +219,12 @@
         }
       }
       else if (routines[current] === "Circle") {
-        x = cx + 260 * Math.cos(time * 2.8);
-        y = cy + 260 * Math.sin(time * 2.8);
+        x = cx + 300 * Math.cos(time * 2.8);
+        y = cy + 300 * Math.sin(time * 2.8);
       }
       else if (routines[current] === "Counter Circle") {
-        x = cx + 260 * Math.cos(-time * 2.8);
-        y = cy + 260 * Math.sin(-time * 2.8);
+        x = cx + 300 * Math.cos(-time * 2.8);
+        y = cy + 300 * Math.sin(-time * 2.8);
       }
       else if (routines[current] === "Horizontal") {
         x = cx + (W * 0.48) * Math.sin(time * 2.5);
@@ -298,13 +281,11 @@
         y = y * 0.78 + r2TargetY * 0.22;
       }
     }
-
     function loop() {
       if (!paused) update();
       draw();
       requestAnimationFrame(loop);
     }
-
     window.addEventListener('keydown', e => {
       if (e.key === "ArrowRight") { current = (current + 1) % routines.length; resetRoutine(); }
       if (e.key === "ArrowLeft") { current = (current - 1 + routines.length) % routines.length; resetRoutine(); }
@@ -322,7 +303,6 @@
         updateSliderFill(speedSlider);
       }
     });
-
     updateSliderFill(speedSlider);
     updateSliderFill(sizeSlider);
     resetRoutine();
