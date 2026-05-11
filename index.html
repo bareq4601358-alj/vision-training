@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vision Training</title>
+  <style>
+    body { margin:0; background:#08080c; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+    canvas { display:block; isolation:isolate; }
+    #top-right {
+      position: absolute; top: 25px; right: 30px; color:#ccc;
+      font-size: 20px; z-index: 10; letter-spacing: 0.02em;
+    }
+    #left-sliders { position: absolute; bottom: 50px; left: 50px; display: flex; flex-direction: column; gap: 35px; z-index: 10; }
+    #bottom-arrows { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); display: flex; gap: 80px; z-index: 10; }
+
+    button {
+      background: rgba(80,80,90,0.35); color: rgba(255,255,255,0.65); border: none;
+      font-size: 28px; width: 55px; height: 55px; border-radius: 50%; cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.15s;
+    }
+    button:hover { background: rgba(80,80,90,0.95); color: #fff; transform: scale(1.08); }
+    label { color:#ccc; font-size: 18px; display: block; margin-bottom: 6px; }
+    input[type="range"] {
+      -webkit-appearance: none;
+      height: 8px;
+      width: 260px;
+      background: #2a2a3a;
+      border-radius: 5px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: linear-gradient(to right, #4a9eff var(--value-percent), #2a2a3a var(--value-percent));
+      border-radius: 5px;
+      height: 8px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #4a9eff;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(74, 158, 255, 0.45);
+      margin-top: -6px;
+    }
+    input[type="range"]::-moz-range-track {
+      background: #2a2a3a;
+      border-radius: 5px;
+      height: 8px;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: #4a9eff;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(74, 158, 255, 0.45);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="top-right">Routine: <span id="routineName">Circle</span> | Speed: <span id="speedDisplay">2.0</span></div>
+  <div id="left-sliders">
+    <div><label>Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0" style="width:260px"></div>
+    <div><label>Size</label><input type="range" id="size" min="12" max="52" step="1" value="28" style="width:260px"></div>
+  </div>
+  <div id="bottom-arrows">
+    <button type="button" id="prev" aria-label="Previous routine">←</button>
+    <button type="button" id="next" aria-label="Next routine">→</button>
+  </div>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d', {
+      alpha: false,
+      desynchronized: true
+    });
+    let W = window.innerWidth;
+    let H = window.innerHeight;
+    let dpr = 1;
+
+    /** Pre-rasterized ball (device px). Blitting avoids per-frame arc AA “swimming” that reads as a trail. */
+    let ballSprite = null;
+    let ballSpritePx = 0;
+    let ballSpriteSl = 0;
+
+    let current = 0;
+    let speed = 2.0;
+    let dotSize = 28;
+    let paused = false;
+    let time = 0;
+    let x = W / 2, y = H / 2;
+    let zigzagY = H * 0.3, zigzagDir = 1, zigzagProgress = 0;
+    let vzigzagX = W * 0.3, vzigzagDir = 1, vzigzagProgress = 0;
+    let r2TargetX = W / 2, r2TargetY = H / 2;
+    let hBalls = [], hCurrent = 0;
+    let vBalls = [], vCurrent = 0;
+    let hDirection = 1;
+    let vDirection = 1;
+    let lastRandomJump = 0;
+    let lastR2Change = 0;
+
+    function rebuildBallSprite() {
+      if (!ballSprite) ballSprite = document.createElement('canvas');
+      const pad = 4;
+      const targetL = 2 * dotSize + 2 * pad;
+      ballSpritePx = Math.max(12, Math.round(targetL * dpr));
+      ballSpriteSl = ballSpritePx / dpr;
+      ballSprite.width = ballSprite.height = ballSpritePx;
+      const sctx = ballSprite.getContext('2d', { alpha: false });
+      sctx.imageSmoothingEnabled = false;
+
+      const w = ballSpritePx;
+      const rDev = Math.max(2, Math.round(dotSize * dpr));
+      const irDev = Math.min(rDev - 1, Math.max(1, Math.round(dotSize * 0.48 * dpr)));
+      const r2 = rDev * rDev;
+      const ir2 = irDev * irDev;
+      const scx = w * 0.5;
+      const scy = w * 0.5;
+
+      const img = sctx.createImageData(w, w);
+      const d = img.data;
+      const n = w * w * 4;
+      for (let i = 0; i < n; i += 4) {
+        d[i] = 8;
+        d[i + 1] = 8;
+        d[i + 2] = 12;
+        d[i + 3] = 255;
+      }
+
+      const x0 = Math.max(0, Math.floor(scx - rDev - 1));
+      const x1 = Math.min(w - 1, Math.ceil(scx + rDev + 1));
+      const y0 = Math.max(0, Math.floor(scy - rDev - 1));
+      const y1 = Math.min(w - 1, Math.ceil(scy + rDev + 1));
+
+      for (let py = y0; py <= y1; py++) {
+        const fy = py + 0.5 - scy;
+        const fy2 = fy * fy;
+        let row = py * w * 4;
+        for (let px = x0; px <= x1; px++) {
+          const fx = px + 0.5 - scx;
+          const dist2 = fx * fx + fy2;
+          const b = row + px * 4;
+          if (dist2 <= ir2) {
+            d[b] = 255;
+            d[b + 1] = 255;
+            d[b + 2] = 255;
+            d[b + 3] = 255;
+          } else if (dist2 <= r2) {
+            d[b] = 216;
+            d[b + 1] = 20;
+            d[b + 2] = 20;
+            d[b + 3] = 255;
+          }
+        }
+      }
+      sctx.putImageData(img, 0, 0);
+    }
+
+    function applyCanvasSize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      canvas.width = Math.max(1, Math.floor(W * dpr));
+      canvas.height = Math.max(1, Math.floor(H * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      rebuildBallSprite();
+    }
+
+    const routines = [
+      'Circle', 'Counter Circle', 'Horizontal', 'Vertical',
+      'Diagonal TL-BR', 'Diagonal TR-BL',
+      'Figure 8 Horizontal', 'Figure 8 Vertical',
+      'Random', 'Random 2', 'Zigzag', 'Vertical Zigzag',
+      'Horizontal Saccades', 'Vertical Saccades'
+    ];
+
+    const routineNameEl = document.getElementById('routineName');
+    const speedDisplayEl = document.getElementById('speedDisplay');
+    const speedSlider = document.getElementById('speed');
+    const sizeSlider = document.getElementById('size');
+
+    function updateSliderFill(slider) {
+      const percent = ((+slider.value - +slider.min) / (+slider.max - +slider.min)) * 100;
+      slider.style.setProperty('--value-percent', percent + '%');
+    }
+
+    speedSlider.addEventListener('input', e => {
+      speed = +e.target.value;
+      speedDisplayEl.textContent = speed.toFixed(1);
+      updateSliderFill(speedSlider);
+    });
+    sizeSlider.addEventListener('input', e => {
+      dotSize = +e.target.value;
+      rebuildBallSprite();
+      updateSliderFill(sizeSlider);
+    });
+    document.getElementById('next').onclick = () => { current = (current + 1) % routines.length; resetRoutine(); };
+    document.getElementById('prev').onclick = () => { current = (current - 1 + routines.length) % routines.length; resetRoutine(); };
+
+    function resetRoutine() {
+      time = 0;
+      x = W / 2; y = H / 2;
+      lastRandomJump = 0;
+      lastR2Change = 0;
+      r2TargetX = W / 2; r2TargetY = H / 2;
+      zigzagProgress = 0; zigzagY = H * 0.3; zigzagDir = 1;
+      vzigzagProgress = 0; vzigzagX = W * 0.3; vzigzagDir = 1;
+      routineNameEl.textContent = routines[current];
+      hDirection = 1;
+      vDirection = 1;
+      if (routines[current] === 'Horizontal Saccades') {
+        hBalls = [];
+        for (let i = 0; i < 7; i++) {
+          const startX = (i % 2 === 0) ? W * 0.82 : W * 0.18;
+          hBalls.push({ x: startX, y: H * (0.15 + i * 0.11), dir: (i % 2 === 0) ? -1 : 1 });
+        }
+        hCurrent = 0;
+      }
+      if (routines[current] === 'Vertical Saccades') {
+        vBalls = [];
+        for (let i = 0; i < 9; i++) {
+          const startY = (i % 2 === 0) ? H * 0.85 : H * 0.15;
+          vBalls.push({ x: W * (0.18 + i * 0.08), y: startY, dir: (i % 2 === 0) ? -1 : 1 });
+        }
+        vCurrent = 0;
+      }
+    }
+
+    function drawBall(px, py) {
+      if (!ballSprite || ballSpritePx <= 0) return;
+      const sl = ballSpriteSl;
+      const dx = Math.round((px - sl / 2) * dpr) / dpr;
+      const dy = Math.round((py - sl / 2) * dpr) / dpr;
+      ctx.drawImage(
+        ballSprite,
+        0, 0, ballSpritePx, ballSpritePx,
+        dx, dy, sl, sl
+      );
+    }
+
+    function draw() {
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+      ctx.filter = 'none';
+      ctx.globalCompositeOperation = 'copy';
+      ctx.fillStyle = '#08080c';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+
+      if (routines[current] === 'Horizontal Saccades' && hBalls.length > 0) {
+        hBalls.forEach(b => drawBall(b.x, b.y));
+      } else if (routines[current] === 'Vertical Saccades' && vBalls.length > 0) {
+        vBalls.forEach(b => drawBall(b.x, b.y));
+      } else {
+        drawBall(x, y);
+      }
+    }
+
+    function update(dt) {
+      const dtClamped = Math.min(dt, 0.05);
+      time += dtClamped * speed;
+      const cx = W / 2;
+      const cy = H / 2;
+      const s = speed;
+
+      if (routines[current] === 'Horizontal Saccades' && hBalls.length > 0) {
+        const ball = hBalls[hCurrent];
+        ball.x += 720 * s * ball.dir * dtClamped;
+        const leftLimit = W * 0.18;
+        const rightLimit = W * 0.82;
+        if ((ball.dir === -1 && ball.x <= leftLimit) || (ball.dir === 1 && ball.x >= rightLimit)) {
+          ball.x = ball.dir === -1 ? leftLimit : rightLimit;
+          ball.dir *= -1;
+          hCurrent += hDirection;
+          if (hCurrent >= hBalls.length || hCurrent < 0) {
+            hDirection *= -1;
+            hCurrent += hDirection;
+          }
+        }
+      }
+      else if (routines[current] === 'Vertical Saccades' && vBalls.length > 0) {
+        const ball = vBalls[vCurrent];
+        ball.y += 720 * s * ball.dir * dtClamped;
+        const topLimit = H * 0.15;
+        const bottomLimit = H * 0.85;
+        if ((ball.dir === 1 && ball.y >= bottomLimit) || (ball.dir === -1 && ball.y <= topLimit)) {
+          ball.y = ball.dir === 1 ? bottomLimit : topLimit;
+          ball.dir *= -1;
+          vCurrent += vDirection;
+          if (vCurrent >= vBalls.length || vCurrent < 0) {
+            vDirection *= -1;
+            vCurrent += vDirection;
+          }
+        }
+      }
+      else if (routines[current] === 'Circle') {
+        x = cx + 300 * Math.cos(time * 2.8);
+        y = cy + 300 * Math.sin(time * 2.8);
+      }
+      else if (routines[current] === 'Counter Circle') {
+        x = cx + 300 * Math.cos(-time * 2.8);
+        y = cy + 300 * Math.sin(-time * 2.8);
+      }
+      else if (routines[current] === 'Horizontal') {
+        x = cx + (W * 0.48) * Math.sin(time * 2.5);
+        y = cy;
+      }
+      else if (routines[current] === 'Vertical') {
+        x = cx;
+        y = cy + (H * 0.48) * Math.sin(time * 2.5);
+      }
+      else if (routines[current] === 'Figure 8 Horizontal') {
+        x = cx + 420 * Math.sin(time * 1.6);
+        y = cy + 320 * Math.sin(2 * time * 1.6);
+      }
+      else if (routines[current] === 'Figure 8 Vertical') {
+        x = cx + 380 * Math.sin(2 * time * 1.6);
+        y = cy + 280 * Math.sin(time * 1.6);
+      }
+      else if (routines[current] === 'Diagonal TL-BR') {
+        x = cx + (W * 0.46) * Math.sin(time * 2.2);
+        y = cy + (H * 0.46) * Math.sin(time * 2.2);
+      }
+      else if (routines[current] === 'Diagonal TR-BL') {
+        x = cx + (W * 0.46) * Math.sin(time * 2.2);
+        y = cy - (H * 0.46) * Math.sin(time * 2.2);
+      }
+      else if (routines[current] === 'Zigzag') {
+        zigzagProgress += speed * 1.9 * dtClamped;
+        x = cx + (W * 0.48) * Math.sin(zigzagProgress);
+        zigzagY += 36 * zigzagDir * s * dtClamped;
+        y = zigzagY;
+        if (y < 60 || y > H - 60) zigzagDir *= -1;
+      }
+      else if (routines[current] === 'Vertical Zigzag') {
+        zigzagProgress += speed * 1.9 * dtClamped;
+        y = cy + (H * 0.48) * Math.sin(zigzagProgress);
+        vzigzagX += 36 * vzigzagDir * s * dtClamped;
+        x = vzigzagX;
+        if (x < 60 || x > W - 60) vzigzagDir *= -1;
+      }
+      else if (routines[current] === 'Random') {
+        if (time - lastRandomJump > 1.9 / speed) {
+          x = 120 + Math.random() * (W - 240);
+          y = 120 + Math.random() * (H - 240);
+          lastRandomJump = time;
+        }
+      }
+      else if (routines[current] === 'Random 2') {
+        if (time - lastR2Change > 2.1 / speed) {
+          r2TargetX = 120 + Math.random() * (W - 240);
+          r2TargetY = 120 + Math.random() * (H - 240);
+          lastR2Change = time;
+        }
+        const framesEq = dtClamped * 60;
+        const k = 1 - Math.pow(0.78, framesEq);
+        x += (r2TargetX - x) * k;
+        y += (r2TargetY - y) * k;
+      }
+    }
+
+    let lastTs = 0;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') lastTs = 0;
+    });
+    function loop(ts) {
+      const dt = lastTs ? (ts - lastTs) / 1000 : 1 / 60;
+      lastTs = ts;
+      if (!paused) update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') { current = (current + 1) % routines.length; resetRoutine(); }
+      if (e.key === 'ArrowLeft') { current = (current - 1 + routines.length) % routines.length; resetRoutine(); }
+      if (e.key === ' ') { e.preventDefault(); paused = !paused; }
+      if (e.key === 'ArrowUp') {
+        speed = Math.min(12, speed + 0.2);
+        speedSlider.value = String(speed);
+        speedDisplayEl.textContent = speed.toFixed(1);
+        updateSliderFill(speedSlider);
+      }
+      if (e.key === 'ArrowDown') {
+        speed = Math.max(0.5, speed - 0.2);
+        speedSlider.value = String(speed);
+        speedDisplayEl.textContent = speed.toFixed(1);
+        updateSliderFill(speedSlider);
+      }
+    });
+
+    applyCanvasSize();
+    window.addEventListener('resize', () => {
+      applyCanvasSize();
+      resetRoutine();
+    });
+
+    updateSliderFill(speedSlider);
+    updateSliderFill(sizeSlider);
+    resetRoutine();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
