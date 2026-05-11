@@ -2,25 +2,106 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Vision Training</title>
   <style>
-    body { margin:0; background:#08080c; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
-    canvas { display:block; isolation:isolate; }
+    /* Desktop layout (default) — matches pre–mobile-tweak version */
+    body { margin: 0; background: #08080c; overflow: hidden; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+    canvas { display: block; isolation: isolate; }
     #top-right {
-      position: absolute; top: 25px; right: 30px; color:#ccc;
+      position: absolute; top: 25px; right: 30px; color: #ccc;
       font-size: 20px; z-index: 10; letter-spacing: 0.02em;
     }
-    #left-sliders { position: absolute; bottom: 50px; left: 50px; display: flex; flex-direction: column; gap: 35px; z-index: 10; }
-    #bottom-arrows { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); display: flex; gap: 80px; z-index: 10; }
-
+    #left-sliders {
+      position: absolute; bottom: 50px; left: 50px; display: flex; flex-direction: column; gap: 35px; z-index: 10;
+      opacity: 0.17;
+      transition: opacity 0.22s ease;
+      padding: 12px 16px 16px 16px;
+      margin: -12px 0 0 -16px;
+      border-radius: 14px;
+    }
+    #left-sliders:hover,
+    #left-sliders:focus-within { opacity: 1; }
+    #bottom-arrows {
+      position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 80px; z-index: 10;
+    }
     button {
       background: rgba(80,80,90,0.35); color: rgba(255,255,255,0.65); border: none;
       font-size: 28px; width: 55px; height: 55px; border-radius: 50%; cursor: pointer;
       transition: background 0.15s, color 0.15s, transform 0.15s;
     }
     button:hover { background: rgba(80,80,90,0.95); color: #fff; transform: scale(1.08); }
-    label { color:#ccc; font-size: 18px; display: block; margin-bottom: 6px; }
+    button.ghost {
+      width: auto; min-width: 44px; height: 44px; padding: 0 14px; border-radius: 22px;
+      font-size: 14px; font-weight: 600; letter-spacing: 0.04em;
+    }
+    #pauseBtn, #helpBtn, #uiToggleBtn { display: none; }
+    label { color: #ccc; font-size: 18px; display: block; margin-bottom: 6px; }
+    #top-left {
+      position: absolute; top: 25px; left: 30px; color: #aaa;
+      font-size: 14px; z-index: 10; display: flex; align-items: center; gap: 12px; row-gap: 8px; flex-wrap: wrap;
+    }
+    #top-left > span,
+    #routine-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #routine-row { gap: 10px; }
+    #routine-row label { margin: 0; line-height: 1; }
+    select#routineSelect {
+      background: rgba(40,40,52,0.95); color: #e8e8ee; border: 1px solid rgba(255,255,255,0.12);
+      font-size: 14px; line-height: 1.2;
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: min(420px, 85vw);
+      min-height: 36px;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    select#dotColor {
+      background: rgba(40,40,52,0.95); color: #e8e8ee; border: 1px solid rgba(255,255,255,0.12);
+      font-size: 14px; line-height: 1.2;
+      padding: 8px 12px;
+      border-radius: 8px;
+      min-height: 36px;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    #pause-overlay {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      pointer-events: none; z-index: 20; font-size: clamp(28px, 5vw, 44px); font-weight: 700;
+      color: rgba(255,255,255,0.14); letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    #pause-overlay.visible { display: flex; }
+    #help-panel {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      z-index: 30; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+    }
+    #help-panel.visible { display: flex; }
+    #help-panel .card {
+      background: #12121a; color: #ddd; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 22px 26px; max-width: 420px; width: calc(100% - 40px);
+      font-size: 14px; line-height: 1.55; box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+    }
+    #help-panel h2 { margin: 0 0 12px; font-size: 17px; color: #fff; font-weight: 600; }
+    #help-panel kbd {
+      display: inline-block; background: #2a2a38; border-radius: 4px; padding: 2px 7px;
+      font-size: 12px; font-family: ui-monospace, monospace; color: #fff; border: 1px solid #3a3a4c;
+    }
+    #help-panel .hint { margin-top: 14px; color: #888; font-size: 13px; }
+    .hint-mobile-only { display: none; }
+    body.ui-hidden #left-sliders,
+    body.ui-hidden #bottom-arrows,
+    body.ui-hidden #top-right,
+    body.ui-hidden #top-left { opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+    body.ui-hidden #focus-hint { opacity: 1; }
+    #focus-hint {
+      position: absolute; bottom: 18px; right: 22px; color: rgba(255,255,255,0.35);
+      font-size: 12px; z-index: 10; opacity: 0; transition: opacity 0.25s ease; pointer-events: none;
+    }
+    #focus-hint .hint-mobile { display: none; }
     input[type="range"] {
       -webkit-appearance: none;
       height: 8px;
@@ -57,18 +138,139 @@
       cursor: pointer;
       box-shadow: 0 0 10px rgba(74, 158, 255, 0.45);
     }
+
+    @media (max-width: 520px) {
+      html { height: 100%; height: 100dvh; }
+      body {
+        min-height: 100%; min-height: 100dvh;
+        -webkit-text-size-adjust: 100%;
+        touch-action: manipulation;
+        overscroll-behavior: none;
+      }
+      canvas { touch-action: none; }
+      #pauseBtn, #helpBtn, #uiToggleBtn { display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation; }
+      #top-right {
+        top: max(12px, env(safe-area-inset-top, 0px));
+        right: max(12px, env(safe-area-inset-right, 0px));
+        font-size: clamp(11px, 3.1vw, 20px);
+        text-align: right;
+        max-width: min(340px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+        line-height: 1.35;
+      }
+      #left-sliders {
+        bottom: max(14px, env(safe-area-inset-bottom, 0px));
+        left: max(12px, env(safe-area-inset-left, 0px));
+        gap: clamp(18px, 5vw, 32px);
+        padding: 12px 14px 14px 14px;
+        margin: -12px 0 0 -12px;
+        max-width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right));
+      }
+      @media (hover: none) {
+        #left-sliders { opacity: 0.34; }
+        #left-sliders:active { opacity: 1; }
+      }
+      #bottom-arrows {
+        bottom: max(168px, calc(env(safe-area-inset-bottom, 0px) + 156px));
+        gap: clamp(28px, 12vw, 80px);
+        padding: 0 max(8px, env(safe-area-inset-left)) 0 max(8px, env(safe-area-inset-right));
+      }
+      #bottom-arrows button { width: 58px; height: 58px; font-size: 30px; }
+      button.ghost { min-height: 44px; touch-action: manipulation; }
+      label { font-size: clamp(14px, 3.8vw, 18px); }
+      #top-left {
+        top: max(10px, env(safe-area-inset-top, 0px));
+        left: max(10px, env(safe-area-inset-left, 0px));
+        font-size: clamp(12px, 3.2vw, 14px);
+        gap: 8px 12px;
+        max-width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
+      }
+      #routine-row { gap: 8px; margin-top: 0; width: 100%; flex-basis: 100%; }
+      select#routineSelect {
+        font-size: clamp(13px, 3.5vw, 14px);
+        padding: 10px 12px;
+        max-width: 100%;
+        flex: 1;
+        min-width: 0;
+        min-height: 44px;
+        touch-action: manipulation;
+      }
+      select#dotColor {
+        font-size: clamp(13px, 3.5vw, 14px);
+        padding: 8px 10px;
+        min-height: 44px;
+        touch-action: manipulation;
+      }
+      #focus-hint {
+        bottom: max(12px, env(safe-area-inset-bottom, 0px));
+        right: max(12px, env(safe-area-inset-right, 0px));
+        font-size: clamp(10px, 2.8vw, 12px);
+        max-width: 42vw;
+        text-align: right;
+      }
+      #focus-hint .hint-desktop { display: none; }
+      #focus-hint .hint-mobile { display: inline; }
+      .hint-mobile-only { display: block; }
+      #left-sliders input[type="range"] {
+        width: min(280px, calc(100vw - 36px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+      }
+      input[type="range"] { height: 10px; }
+      input[type="range"]::-webkit-slider-runnable-track { height: 10px; }
+      input[type="range"]::-webkit-slider-thumb {
+        width: 26px;
+        height: 26px;
+        margin-top: -8px;
+      }
+      input[type="range"]::-moz-range-track { height: 10px; }
+      input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; }
+    }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
-  <div id="top-right">Routine: <span id="routineName">Circle</span> | Speed: <span id="speedDisplay">2.0</span></div>
+  <div id="top-left">
+    <button type="button" class="ghost" id="pauseBtn" aria-label="Pause" title="Pause / resume">⏸</button>
+    <button type="button" class="ghost" id="helpBtn" aria-label="Shortcuts" title="Shortcuts">?</button>
+    <button type="button" class="ghost" id="uiToggleBtn" aria-label="Hide or show panels" title="Hide UI (same as H)">UI</button>
+    <button type="button" class="ghost" id="fullscreenBtn" title="Fullscreen (F)">⛶ Full</button>
+    <span>Session <span id="sessionDisplay">0:00</span></span>
+    <span>Color <select id="dotColor" aria-label="Dot colors">
+      <option value="red" selected>Red / white</option>
+      <option value="amber">Amber / white</option>
+      <option value="cyan">Cyan / white</option>
+      <option value="white">White / dark</option>
+    </select></span>
+    <div id="routine-row">
+      <label for="routineSelect" style="margin:0;color:#888;font-size:13px">Routine</label>
+      <select id="routineSelect" aria-label="Choose routine"></select>
+    </div>
+  </div>
+  <div id="top-right"><span id="routineName">Circle</span> · Speed <span id="speedDisplay">2.0</span> · Range <span id="rangeDisplay">100</span>%</div>
   <div id="left-sliders">
     <div><label>Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0" style="width:260px"></div>
     <div><label>Size</label><input type="range" id="size" min="12" max="52" step="1" value="28" style="width:260px"></div>
+    <div><label>Path range</label><input type="range" id="pathRange" min="35" max="100" step="1" value="100" style="width:260px"></div>
   </div>
   <div id="bottom-arrows">
     <button type="button" id="prev" aria-label="Previous routine">←</button>
     <button type="button" id="next" aria-label="Next routine">→</button>
+  </div>
+  <div id="focus-hint">
+    <span class="hint-desktop">Press <kbd style="font:inherit;padding:1px 5px;border-radius:4px;background:#222">H</kbd> for controls</span>
+    <span class="hint-mobile">Tap <strong>UI</strong> or <kbd style="font:inherit;padding:1px 5px;border-radius:4px;background:#222">H</kbd> for controls</span>
+  </div>
+  <div id="pause-overlay" aria-hidden="true">Paused</div>
+  <div id="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="card">
+      <h2 id="help-title">Shortcuts</h2>
+      <div><kbd>←</kbd> <kbd>→</kbd> or buttons — change routine</div>
+      <div><kbd>Space</kbd> — pause / resume</div>
+      <div><kbd>↑</kbd> <kbd>↓</kbd> — speed</div>
+      <div><kbd>F</kbd> — fullscreen</div>
+      <div><kbd>H</kbd> — hide or show all controls</div>
+      <div><kbd>?</kbd> — this panel &nbsp;·&nbsp; <kbd>Esc</kbd> — close</div>
+      <p class="hint">Session timer runs while not paused.</p>
+      <p class="hint hint-mobile-only">On a phone, use the top buttons for pause, help, UI, and fullscreen.</p>
+    </div>
   </div>
   <script>
     const canvas = document.getElementById('game');
@@ -88,6 +290,9 @@
     let current = 0;
     let speed = 2.0;
     let dotSize = 28;
+    let rangeScale = 1;
+    let sessionSec = 0;
+    let dotPaletteKey = 'red';
     let paused = false;
     let time = 0;
     let x = W / 2, y = H / 2;
@@ -100,7 +305,6 @@
     let vDirection = 1;
     let lastRandomJump = 0;
     let lastR2Change = 0;
-
     function rebuildBallSprite() {
       if (!ballSprite) ballSprite = document.createElement('canvas');
       const pad = 4;
@@ -110,6 +314,16 @@
       ballSprite.width = ballSprite.height = ballSpritePx;
       const sctx = ballSprite.getContext('2d', { alpha: false });
       sctx.imageSmoothingEnabled = false;
+
+      const palettes = {
+        red: { outer: [216, 20, 20], inner: [255, 255, 255] },
+        amber: { outer: [255, 170, 40], inner: [255, 255, 255] },
+        cyan: { outer: [40, 210, 255], inner: [255, 255, 255] },
+        white: { outer: [248, 248, 252], inner: [22, 22, 30] }
+      };
+      const pal = palettes[dotPaletteKey] || palettes.red;
+      const [or, og, ob] = pal.outer;
+      const [ir, ig, ib] = pal.inner;
 
       const w = ballSpritePx;
       const rDev = Math.max(2, Math.round(dotSize * dpr));
@@ -143,14 +357,14 @@
           const dist2 = fx * fx + fy2;
           const b = row + px * 4;
           if (dist2 <= ir2) {
-            d[b] = 255;
-            d[b + 1] = 255;
-            d[b + 2] = 255;
+            d[b] = ir;
+            d[b + 1] = ig;
+            d[b + 2] = ib;
             d[b + 3] = 255;
           } else if (dist2 <= r2) {
-            d[b] = 216;
-            d[b + 1] = 20;
-            d[b + 2] = 20;
+            d[b] = or;
+            d[b + 1] = og;
+            d[b + 2] = ob;
             d[b + 3] = 255;
           }
         }
@@ -181,8 +395,26 @@
 
     const routineNameEl = document.getElementById('routineName');
     const speedDisplayEl = document.getElementById('speedDisplay');
+    const rangeDisplayEl = document.getElementById('rangeDisplay');
+    const sessionDisplayEl = document.getElementById('sessionDisplay');
     const speedSlider = document.getElementById('speed');
     const sizeSlider = document.getElementById('size');
+    const pathRangeSlider = document.getElementById('pathRange');
+    const routineSelect = document.getElementById('routineSelect');
+    const dotColorSelect = document.getElementById('dotColor');
+    const pauseOverlay = document.getElementById('pause-overlay');
+    const helpPanel = document.getElementById('help-panel');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const helpBtn = document.getElementById('helpBtn');
+    const uiToggleBtn = document.getElementById('uiToggleBtn');
+
+    routines.forEach((name, i) => {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = name;
+      routineSelect.appendChild(o);
+    });
 
     function updateSliderFill(slider) {
       const percent = ((+slider.value - +slider.min) / (+slider.max - +slider.min)) * 100;
@@ -199,10 +431,53 @@
       rebuildBallSprite();
       updateSliderFill(sizeSlider);
     });
-    document.getElementById('next').onclick = () => { current = (current + 1) % routines.length; resetRoutine(); };
-    document.getElementById('prev').onclick = () => { current = (current - 1 + routines.length) % routines.length; resetRoutine(); };
+    pathRangeSlider.addEventListener('input', e => {
+      rangeScale = +e.target.value / 100;
+      rangeDisplayEl.textContent = String(Math.round(rangeScale * 100));
+      updateSliderFill(pathRangeSlider);
+      if (routines[current] === 'Horizontal Saccades' || routines[current] === 'Vertical Saccades') resetRoutine();
+    });
+    dotColorSelect.addEventListener('change', () => {
+      dotPaletteKey = dotColorSelect.value;
+      rebuildBallSprite();
+    });
+    routineSelect.addEventListener('change', () => {
+      current = +routineSelect.value;
+      resetRoutine();
+    });
+    function goNext() { current = (current + 1) % routines.length; resetRoutine(); }
+    function goPrev() { current = (current - 1 + routines.length) % routines.length; resetRoutine(); }
+    document.getElementById('next').onclick = goNext;
+    document.getElementById('prev').onclick = goPrev;
+
+    function setHelp(open) {
+      helpPanel.classList.toggle('visible', open);
+      helpPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
+    helpPanel.addEventListener('click', e => { if (e.target === helpPanel) setHelp(false); });
+    function syncFullscreenLabel() {
+      fullscreenBtn.textContent = document.fullscreenElement ? 'Exit full' : '⛶ Full';
+    }
+    document.addEventListener('fullscreenchange', syncFullscreenLabel);
+    fullscreenBtn.addEventListener('click', async () => {
+      try {
+        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+        else await document.exitFullscreen();
+      } catch (_) {}
+      syncFullscreenLabel();
+    });
+
+    function syncPauseBtn() {
+      pauseBtn.textContent = paused ? '▶' : '⏸';
+      pauseBtn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+    }
+    pauseBtn.addEventListener('click', () => { paused = !paused; });
+    helpBtn.addEventListener('click', () => setHelp(!helpPanel.classList.contains('visible')));
+    uiToggleBtn.addEventListener('click', () => document.body.classList.toggle('ui-hidden'));
 
     function resetRoutine() {
+      if (current >= routines.length) current = routines.length - 1;
+      if (current < 0) current = 0;
       time = 0;
       x = W / 2; y = H / 2;
       lastRandomJump = 0;
@@ -211,20 +486,29 @@
       zigzagProgress = 0; zigzagY = H * 0.3; zigzagDir = 1;
       vzigzagProgress = 0; vzigzagX = W * 0.3; vzigzagDir = 1;
       routineNameEl.textContent = routines[current];
+      routineSelect.value = String(current);
       hDirection = 1;
       vDirection = 1;
       if (routines[current] === 'Horizontal Saccades') {
         hBalls = [];
+        const hcx = W / 2;
+        const xHalf = 0.32 * W * rangeScale;
+        const leftL = hcx - xHalf;
+        const rightL = hcx + xHalf;
         for (let i = 0; i < 7; i++) {
-          const startX = (i % 2 === 0) ? W * 0.82 : W * 0.18;
+          const startX = (i % 2 === 0) ? rightL : leftL;
           hBalls.push({ x: startX, y: H * (0.15 + i * 0.11), dir: (i % 2 === 0) ? -1 : 1 });
         }
         hCurrent = 0;
       }
       if (routines[current] === 'Vertical Saccades') {
         vBalls = [];
+        const vcy = H / 2;
+        const yHalf = 0.35 * H * rangeScale;
+        const topL = vcy - yHalf;
+        const botL = vcy + yHalf;
         for (let i = 0; i < 9; i++) {
-          const startY = (i % 2 === 0) ? H * 0.85 : H * 0.15;
+          const startY = (i % 2 === 0) ? botL : topL;
           vBalls.push({ x: W * (0.18 + i * 0.08), y: startY, dir: (i % 2 === 0) ? -1 : 1 });
         }
         vCurrent = 0;
@@ -272,8 +556,9 @@
       if (routines[current] === 'Horizontal Saccades' && hBalls.length > 0) {
         const ball = hBalls[hCurrent];
         ball.x += 720 * s * ball.dir * dtClamped;
-        const leftLimit = W * 0.18;
-        const rightLimit = W * 0.82;
+        const xHalf = 0.32 * W * rangeScale;
+        const leftLimit = cx - xHalf;
+        const rightLimit = cx + xHalf;
         if ((ball.dir === -1 && ball.x <= leftLimit) || (ball.dir === 1 && ball.x >= rightLimit)) {
           ball.x = ball.dir === -1 ? leftLimit : rightLimit;
           ball.dir *= -1;
@@ -287,8 +572,9 @@
       else if (routines[current] === 'Vertical Saccades' && vBalls.length > 0) {
         const ball = vBalls[vCurrent];
         ball.y += 720 * s * ball.dir * dtClamped;
-        const topLimit = H * 0.15;
-        const bottomLimit = H * 0.85;
+        const yHalf = 0.35 * H * rangeScale;
+        const topLimit = cy - yHalf;
+        const bottomLimit = cy + yHalf;
         if ((ball.dir === 1 && ball.y >= bottomLimit) || (ball.dir === -1 && ball.y <= topLimit)) {
           ball.y = ball.dir === 1 ? bottomLimit : topLimit;
           ball.dir *= -1;
@@ -300,62 +586,64 @@
         }
       }
       else if (routines[current] === 'Circle') {
-        x = cx + 300 * Math.cos(time * 2.8);
-        y = cy + 300 * Math.sin(time * 2.8);
+        const rad = 300 * rangeScale;
+        x = cx + rad * Math.cos(time * 2.8);
+        y = cy + rad * Math.sin(time * 2.8);
       }
       else if (routines[current] === 'Counter Circle') {
-        x = cx + 300 * Math.cos(-time * 2.8);
-        y = cy + 300 * Math.sin(-time * 2.8);
+        const rad = 300 * rangeScale;
+        x = cx + rad * Math.cos(-time * 2.8);
+        y = cy + rad * Math.sin(-time * 2.8);
       }
       else if (routines[current] === 'Horizontal') {
-        x = cx + (W * 0.48) * Math.sin(time * 2.5);
+        x = cx + (W * 0.48) * rangeScale * Math.sin(time * 2.5);
         y = cy;
       }
       else if (routines[current] === 'Vertical') {
         x = cx;
-        y = cy + (H * 0.48) * Math.sin(time * 2.5);
+        y = cy + (H * 0.48) * rangeScale * Math.sin(time * 2.5);
       }
       else if (routines[current] === 'Figure 8 Horizontal') {
-        x = cx + 420 * Math.sin(time * 1.6);
-        y = cy + 320 * Math.sin(2 * time * 1.6);
+        x = cx + 420 * rangeScale * Math.sin(time * 1.6);
+        y = cy + 320 * rangeScale * Math.sin(2 * time * 1.6);
       }
       else if (routines[current] === 'Figure 8 Vertical') {
-        x = cx + 380 * Math.sin(2 * time * 1.6);
-        y = cy + 280 * Math.sin(time * 1.6);
+        x = cx + 380 * rangeScale * Math.sin(2 * time * 1.6);
+        y = cy + 280 * rangeScale * Math.sin(time * 1.6);
       }
       else if (routines[current] === 'Diagonal TL-BR') {
-        x = cx + (W * 0.46) * Math.sin(time * 2.2);
-        y = cy + (H * 0.46) * Math.sin(time * 2.2);
+        x = cx + (W * 0.46) * rangeScale * Math.sin(time * 2.2);
+        y = cy + (H * 0.46) * rangeScale * Math.sin(time * 2.2);
       }
       else if (routines[current] === 'Diagonal TR-BL') {
-        x = cx + (W * 0.46) * Math.sin(time * 2.2);
-        y = cy - (H * 0.46) * Math.sin(time * 2.2);
+        x = cx + (W * 0.46) * rangeScale * Math.sin(time * 2.2);
+        y = cy - (H * 0.46) * rangeScale * Math.sin(time * 2.2);
       }
       else if (routines[current] === 'Zigzag') {
         zigzagProgress += speed * 1.9 * dtClamped;
-        x = cx + (W * 0.48) * Math.sin(zigzagProgress);
+        x = cx + (W * 0.48) * rangeScale * Math.sin(zigzagProgress);
         zigzagY += 36 * zigzagDir * s * dtClamped;
         y = zigzagY;
         if (y < 60 || y > H - 60) zigzagDir *= -1;
       }
       else if (routines[current] === 'Vertical Zigzag') {
         zigzagProgress += speed * 1.9 * dtClamped;
-        y = cy + (H * 0.48) * Math.sin(zigzagProgress);
+        y = cy + (H * 0.48) * rangeScale * Math.sin(zigzagProgress);
         vzigzagX += 36 * vzigzagDir * s * dtClamped;
         x = vzigzagX;
         if (x < 60 || x > W - 60) vzigzagDir *= -1;
       }
       else if (routines[current] === 'Random') {
         if (time - lastRandomJump > 1.9 / speed) {
-          x = 120 + Math.random() * (W - 240);
-          y = 120 + Math.random() * (H - 240);
+          x = cx + rangeScale * ((120 + Math.random() * (W - 240)) - cx);
+          y = cy + rangeScale * ((120 + Math.random() * (H - 240)) - cy);
           lastRandomJump = time;
         }
       }
       else if (routines[current] === 'Random 2') {
         if (time - lastR2Change > 2.1 / speed) {
-          r2TargetX = 120 + Math.random() * (W - 240);
-          r2TargetY = 120 + Math.random() * (H - 240);
+          r2TargetX = cx + rangeScale * ((120 + Math.random() * (W - 240)) - cx);
+          r2TargetY = cy + rangeScale * ((120 + Math.random() * (H - 240)) - cy);
           lastR2Change = time;
         }
         const framesEq = dtClamped * 60;
@@ -369,18 +657,49 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') lastTs = 0;
     });
+    function formatSession(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
     function loop(ts) {
       const dt = lastTs ? (ts - lastTs) / 1000 : 1 / 60;
       lastTs = ts;
-      if (!paused) update(dt);
+      if (!paused) {
+        update(dt);
+        sessionSec += dt;
+      }
+      sessionDisplayEl.textContent = formatSession(sessionSec);
+      pauseOverlay.classList.toggle('visible', paused);
+      pauseOverlay.setAttribute('aria-hidden', paused ? 'false' : 'true');
+      syncPauseBtn();
       draw();
       requestAnimationFrame(loop);
     }
 
     window.addEventListener('keydown', e => {
-      if (e.key === 'ArrowRight') { current = (current + 1) % routines.length; resetRoutine(); }
-      if (e.key === 'ArrowLeft') { current = (current - 1 + routines.length) % routines.length; resetRoutine(); }
-      if (e.key === ' ') { e.preventDefault(); paused = !paused; }
+      const onForm = e.target && e.target.closest && e.target.closest('input, select, textarea');
+      if (onForm && e.key !== 'Escape') return;
+
+      if (e.key === 'Escape') { setHelp(false); return; }
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setHelp(!helpPanel.classList.contains('visible'));
+        return;
+      }
+      if (e.key === 'h' || e.key === 'H') {
+        document.body.classList.toggle('ui-hidden');
+        return;
+      }
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        fullscreenBtn.click();
+        return;
+      }
+      if (e.key === 'ArrowRight') { goNext(); }
+      if (e.key === 'ArrowLeft') { goPrev(); }
+      if (e.key === ' ') { e.preventDefault(); paused = !paused; syncPauseBtn(); }
       if (e.key === 'ArrowUp') {
         speed = Math.min(12, speed + 0.2);
         speedSlider.value = String(speed);
@@ -403,7 +722,10 @@
 
     updateSliderFill(speedSlider);
     updateSliderFill(sizeSlider);
+    updateSliderFill(pathRangeSlider);
+    rangeDisplayEl.textContent = String(Math.round(rangeScale * 100));
     resetRoutine();
+    syncPauseBtn();
     requestAnimationFrame(loop);
   </script>
 </body>
