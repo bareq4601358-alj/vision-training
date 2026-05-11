@@ -173,10 +173,13 @@
         background: transparent;
         border: none;
         border-radius: 0;
-        opacity: 0.85;
+        opacity: 0.17;
+        transition: opacity 0.22s ease;
       }
+      /* Match desktop: faint until hover, tap/drag, or keyboard focus inside. */
       #left-sliders:hover,
-      #left-sliders:focus-within {
+      #left-sliders:focus-within,
+      #left-sliders:active {
         opacity: 1;
       }
       #bottom-arrows {
@@ -227,8 +230,8 @@
   </div>
   <div id="top-right"><span id="routineName">Circle</span> · Speed <span id="speedDisplay">2.0</span> · Range <span id="rangeDisplay">100</span>%</div>
   <div id="left-sliders">
-    <div><label>Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0" style="width:260px"></div>
-    <div><label>Size</label><input type="range" id="size" min="12" max="52" step="1" value="28" style="width:260px"></div>
+    <div><label for="speed">Speed</label><input type="range" id="speed" min="0.5" max="12" step="0.1" value="2.0" style="width:260px"></div>
+    <div><label for="size">Size</label><input type="range" id="size" min="12" max="52" step="1" value="28" style="width:260px"></div>
     <div><label>Path range</label><input type="range" id="pathRange" min="35" max="100" step="1" value="100" style="width:260px"></div>
   </div>
   <div id="bottom-arrows">
@@ -394,6 +397,12 @@
     const pauseBtn = document.getElementById('pauseBtn');
     const helpBtn = document.getElementById('helpBtn');
     const uiToggleBtn = document.getElementById('uiToggleBtn');
+
+    /* Same breakpoint as CSS mobile layout: smaller default dot on phones. */
+    if (window.innerWidth <= 520) {
+      dotSize = 14;
+      sizeSlider.value = String(dotSize);
+    }
 
     routines.forEach((name, i) => {
       const o = document.createElement('option');
