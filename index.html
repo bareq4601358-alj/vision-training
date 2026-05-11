@@ -42,7 +42,11 @@
       position: absolute; top: 25px; left: 30px; color: #aaa;
       font-size: 14px; z-index: 10; display: flex; align-items: center; gap: 12px; row-gap: 8px; flex-wrap: wrap;
     }
+    .top-tools,
+    .top-meta { display: contents; }
     #top-left > span,
+    .top-meta > span,
+    .top-color-row,
     #routine-row {
       display: inline-flex;
       align-items: center;
@@ -148,70 +152,47 @@
         overscroll-behavior: none;
       }
       canvas { touch-action: none; }
-      #pauseBtn, #helpBtn, #uiToggleBtn { display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation; }
-      #top-right {
-        top: max(12px, env(safe-area-inset-top, 0px));
-        right: max(12px, env(safe-area-inset-right, 0px));
-        font-size: clamp(11px, 3.1vw, 20px);
-        text-align: right;
-        max-width: min(340px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
-        line-height: 1.35;
+      #top-left,
+      #top-right,
+      #focus-hint {
+        display: none !important;
+      }
+      /* Hide path row on small screens only; keep desktop markup unchanged (no extra wrapper class). */
+      #left-sliders > div:has(#pathRange) {
+        display: none !important;
       }
       #left-sliders {
-        bottom: max(14px, env(safe-area-inset-bottom, 0px));
+        bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 72px);
         left: max(12px, env(safe-area-inset-left, 0px));
-        gap: clamp(18px, 5vw, 32px);
-        padding: 12px 14px 14px 14px;
-        margin: -12px 0 0 -12px;
-        max-width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right));
+        right: max(12px, env(safe-area-inset-right, 0px));
+        width: auto;
+        gap: 12px;
+        padding: 8px 0 10px;
+        margin: 0;
+        max-width: none;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        opacity: 0.85;
       }
-      @media (hover: none) {
-        #left-sliders { opacity: 0.34; }
-        #left-sliders:active { opacity: 1; }
+      #left-sliders:hover,
+      #left-sliders:focus-within {
+        opacity: 1;
       }
       #bottom-arrows {
-        bottom: max(168px, calc(env(safe-area-inset-bottom, 0px) + 156px));
-        gap: clamp(28px, 12vw, 80px);
-        padding: 0 max(8px, env(safe-area-inset-left)) 0 max(8px, env(safe-area-inset-right));
-      }
-      #bottom-arrows button { width: 58px; height: 58px; font-size: 30px; }
-      button.ghost { min-height: 44px; touch-action: manipulation; }
-      label { font-size: clamp(14px, 3.8vw, 18px); }
-      #top-left {
-        top: max(10px, env(safe-area-inset-top, 0px));
-        left: max(10px, env(safe-area-inset-left, 0px));
-        font-size: clamp(12px, 3.2vw, 14px);
-        gap: 8px 12px;
-        max-width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
-      }
-      #routine-row { gap: 8px; margin-top: 0; width: 100%; flex-basis: 100%; }
-      select#routineSelect {
-        font-size: clamp(13px, 3.5vw, 14px);
-        padding: 10px 12px;
-        max-width: 100%;
-        flex: 1;
-        min-width: 0;
-        min-height: 44px;
-        touch-action: manipulation;
-      }
-      select#dotColor {
-        font-size: clamp(13px, 3.5vw, 14px);
-        padding: 8px 10px;
-        min-height: 44px;
-        touch-action: manipulation;
-      }
-      #focus-hint {
         bottom: max(12px, env(safe-area-inset-bottom, 0px));
-        right: max(12px, env(safe-area-inset-right, 0px));
-        font-size: clamp(10px, 2.8vw, 12px);
-        max-width: 42vw;
-        text-align: right;
+        left: 50%;
+        transform: translateX(-50%);
+        gap: min(22vw, 72px);
+        padding: 0 max(8px, env(safe-area-inset-left)) 0 max(8px, env(safe-area-inset-right));
+        z-index: 12;
       }
-      #focus-hint .hint-desktop { display: none; }
-      #focus-hint .hint-mobile { display: inline; }
+      #bottom-arrows button { width: 52px; height: 52px; font-size: 26px; }
+      label { font-size: clamp(13px, 3.5vw, 16px); color: rgba(255,255,255,0.55); }
       .hint-mobile-only { display: block; }
       #left-sliders input[type="range"] {
-        width: min(280px, calc(100vw - 36px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+        width: 100%;
+        max-width: none;
       }
       input[type="range"] { height: 10px; }
       input[type="range"]::-webkit-slider-runnable-track { height: 10px; }
@@ -233,7 +214,7 @@
     <button type="button" class="ghost" id="uiToggleBtn" aria-label="Hide or show panels" title="Hide UI (same as H)">UI</button>
     <button type="button" class="ghost" id="fullscreenBtn" title="Fullscreen (F)">⛶ Full</button>
     <span>Session <span id="sessionDisplay">0:00</span></span>
-    <span>Color <select id="dotColor" aria-label="Dot colors">
+    <span class="top-color-row">Color <select id="dotColor" aria-label="Dot colors">
       <option value="red" selected>Red / white</option>
       <option value="amber">Amber / white</option>
       <option value="cyan">Cyan / white</option>
@@ -269,7 +250,7 @@
       <div><kbd>H</kbd> — hide or show all controls</div>
       <div><kbd>?</kbd> — this panel &nbsp;·&nbsp; <kbd>Esc</kbd> — close</div>
       <p class="hint">Session timer runs while not paused.</p>
-      <p class="hint hint-mobile-only">On a phone, use the top buttons for pause, help, UI, and fullscreen.</p>
+      <p class="hint hint-mobile-only">On a phone you only see Speed and Size sliders plus ← → at the bottom to change routine. Wider screens show the full controls.</p>
     </div>
   </div>
   <script>
@@ -370,6 +351,11 @@
         }
       }
       sctx.putImageData(img, 0, 0);
+    }
+
+    /** Half-size of on-canvas ball sprite in CSS px; keep motion within [m, W-m] / [m, H-m]. */
+    function ballHalfExtent() {
+      return Math.max(6, ballSpriteSl * 0.5 + 1);
     }
 
     function applyCanvasSize() {
@@ -483,8 +469,13 @@
       lastRandomJump = 0;
       lastR2Change = 0;
       r2TargetX = W / 2; r2TargetY = H / 2;
-      zigzagProgress = 0; zigzagY = H * 0.3; zigzagDir = 1;
-      vzigzagProgress = 0; vzigzagX = W * 0.3; vzigzagDir = 1;
+      const hm = ballHalfExtent();
+      zigzagProgress = 0;
+      zigzagY = Math.min(H - hm, Math.max(hm, H * 0.3));
+      zigzagDir = 1;
+      vzigzagProgress = 0;
+      vzigzagX = Math.min(W - hm, Math.max(hm, W * 0.3));
+      vzigzagDir = 1;
       routineNameEl.textContent = routines[current];
       routineSelect.value = String(current);
       hDirection = 1;
@@ -492,24 +483,28 @@
       if (routines[current] === 'Horizontal Saccades') {
         hBalls = [];
         const hcx = W / 2;
-        const xHalf = 0.32 * W * rangeScale;
+        const maxXHalf = Math.max(0, Math.min(hcx, W - hcx) - hm);
+        const xHalf = Math.min(0.32 * W * rangeScale, maxXHalf);
         const leftL = hcx - xHalf;
         const rightL = hcx + xHalf;
         for (let i = 0; i < 7; i++) {
           const startX = (i % 2 === 0) ? rightL : leftL;
-          hBalls.push({ x: startX, y: H * (0.15 + i * 0.11), dir: (i % 2 === 0) ? -1 : 1 });
+          const yi = Math.min(H - hm, Math.max(hm, H * (0.15 + i * 0.11)));
+          hBalls.push({ x: startX, y: yi, dir: (i % 2 === 0) ? -1 : 1 });
         }
         hCurrent = 0;
       }
       if (routines[current] === 'Vertical Saccades') {
         vBalls = [];
         const vcy = H / 2;
-        const yHalf = 0.35 * H * rangeScale;
+        const maxYHalf = Math.max(0, Math.min(vcy, H - vcy) - hm);
+        const yHalf = Math.min(0.35 * H * rangeScale, maxYHalf);
         const topL = vcy - yHalf;
         const botL = vcy + yHalf;
         for (let i = 0; i < 9; i++) {
           const startY = (i % 2 === 0) ? botL : topL;
-          vBalls.push({ x: W * (0.18 + i * 0.08), y: startY, dir: (i % 2 === 0) ? -1 : 1 });
+          const xi = Math.min(W - hm, Math.max(hm, W * (0.18 + i * 0.08)));
+          vBalls.push({ x: xi, y: startY, dir: (i % 2 === 0) ? -1 : 1 });
         }
         vCurrent = 0;
       }
@@ -552,11 +547,14 @@
       const cx = W / 2;
       const cy = H / 2;
       const s = speed;
+      const m = ballHalfExtent();
+      const maxAmpX = Math.max(0, Math.min(cx, W - cx) - m);
+      const maxAmpY = Math.max(0, Math.min(cy, H - cy) - m);
 
       if (routines[current] === 'Horizontal Saccades' && hBalls.length > 0) {
         const ball = hBalls[hCurrent];
         ball.x += 720 * s * ball.dir * dtClamped;
-        const xHalf = 0.32 * W * rangeScale;
+        const xHalf = Math.min(0.32 * W * rangeScale, maxAmpX);
         const leftLimit = cx - xHalf;
         const rightLimit = cx + xHalf;
         if ((ball.dir === -1 && ball.x <= leftLimit) || (ball.dir === 1 && ball.x >= rightLimit)) {
@@ -568,11 +566,13 @@
             hCurrent += hDirection;
           }
         }
+        ball.x = Math.min(W - m, Math.max(m, ball.x));
+        ball.y = Math.min(H - m, Math.max(m, ball.y));
       }
       else if (routines[current] === 'Vertical Saccades' && vBalls.length > 0) {
         const ball = vBalls[vCurrent];
         ball.y += 720 * s * ball.dir * dtClamped;
-        const yHalf = 0.35 * H * rangeScale;
+        const yHalf = Math.min(0.35 * H * rangeScale, maxAmpY);
         const topLimit = cy - yHalf;
         const bottomLimit = cy + yHalf;
         if ((ball.dir === 1 && ball.y >= bottomLimit) || (ball.dir === -1 && ball.y <= topLimit)) {
@@ -584,72 +584,105 @@
             vCurrent += vDirection;
           }
         }
+        ball.x = Math.min(W - m, Math.max(m, ball.x));
+        ball.y = Math.min(H - m, Math.max(m, ball.y));
       }
       else if (routines[current] === 'Circle') {
-        const rad = 300 * rangeScale;
+        const rad = Math.min(300 * rangeScale, Math.min(maxAmpX, maxAmpY));
         x = cx + rad * Math.cos(time * 2.8);
         y = cy + rad * Math.sin(time * 2.8);
       }
       else if (routines[current] === 'Counter Circle') {
-        const rad = 300 * rangeScale;
+        const rad = Math.min(300 * rangeScale, Math.min(maxAmpX, maxAmpY));
         x = cx + rad * Math.cos(-time * 2.8);
         y = cy + rad * Math.sin(-time * 2.8);
       }
       else if (routines[current] === 'Horizontal') {
-        x = cx + (W * 0.48) * rangeScale * Math.sin(time * 2.5);
+        const amp = Math.min(W * 0.48 * rangeScale, maxAmpX);
+        x = cx + amp * Math.sin(time * 2.5);
         y = cy;
       }
       else if (routines[current] === 'Vertical') {
+        const amp = Math.min(H * 0.48 * rangeScale, maxAmpY);
         x = cx;
-        y = cy + (H * 0.48) * rangeScale * Math.sin(time * 2.5);
+        y = cy + amp * Math.sin(time * 2.5);
       }
       else if (routines[current] === 'Figure 8 Horizontal') {
-        x = cx + 420 * rangeScale * Math.sin(time * 1.6);
-        y = cy + 320 * rangeScale * Math.sin(2 * time * 1.6);
+        const ax = Math.min(420 * rangeScale, maxAmpX);
+        const ay = Math.min(320 * rangeScale, maxAmpY);
+        x = cx + ax * Math.sin(time * 1.6);
+        y = cy + ay * Math.sin(2 * time * 1.6);
       }
       else if (routines[current] === 'Figure 8 Vertical') {
-        x = cx + 380 * rangeScale * Math.sin(2 * time * 1.6);
-        y = cy + 280 * rangeScale * Math.sin(time * 1.6);
+        const ax = Math.min(380 * rangeScale, maxAmpX);
+        const ay = Math.min(280 * rangeScale, maxAmpY);
+        x = cx + ax * Math.sin(2 * time * 1.6);
+        y = cy + ay * Math.sin(time * 1.6);
       }
       else if (routines[current] === 'Diagonal TL-BR') {
-        x = cx + (W * 0.46) * rangeScale * Math.sin(time * 2.2);
-        y = cy + (H * 0.46) * rangeScale * Math.sin(time * 2.2);
+        const ax = Math.min(W * 0.46 * rangeScale, maxAmpX);
+        const ay = Math.min(H * 0.46 * rangeScale, maxAmpY);
+        x = cx + ax * Math.sin(time * 2.2);
+        y = cy + ay * Math.sin(time * 2.2);
       }
       else if (routines[current] === 'Diagonal TR-BL') {
-        x = cx + (W * 0.46) * rangeScale * Math.sin(time * 2.2);
-        y = cy - (H * 0.46) * rangeScale * Math.sin(time * 2.2);
+        const ax = Math.min(W * 0.46 * rangeScale, maxAmpX);
+        const ay = Math.min(H * 0.46 * rangeScale, maxAmpY);
+        x = cx + ax * Math.sin(time * 2.2);
+        y = cy - ay * Math.sin(time * 2.2);
       }
       else if (routines[current] === 'Zigzag') {
         zigzagProgress += speed * 1.9 * dtClamped;
-        x = cx + (W * 0.48) * rangeScale * Math.sin(zigzagProgress);
+        const ax = Math.min(W * 0.48 * rangeScale, maxAmpX);
+        x = cx + ax * Math.sin(zigzagProgress);
         zigzagY += 36 * zigzagDir * s * dtClamped;
         y = zigzagY;
-        if (y < 60 || y > H - 60) zigzagDir *= -1;
+        if (y < m || y > H - m) {
+          zigzagY = Math.min(H - m, Math.max(m, y));
+          zigzagDir *= -1;
+        }
       }
       else if (routines[current] === 'Vertical Zigzag') {
         zigzagProgress += speed * 1.9 * dtClamped;
-        y = cy + (H * 0.48) * rangeScale * Math.sin(zigzagProgress);
+        const ay = Math.min(H * 0.48 * rangeScale, maxAmpY);
+        y = cy + ay * Math.sin(zigzagProgress);
         vzigzagX += 36 * vzigzagDir * s * dtClamped;
         x = vzigzagX;
-        if (x < 60 || x > W - 60) vzigzagDir *= -1;
+        if (x < m || x > W - m) {
+          vzigzagX = Math.min(W - m, Math.max(m, x));
+          vzigzagDir *= -1;
+        }
       }
       else if (routines[current] === 'Random') {
         if (time - lastRandomJump > 1.9 / speed) {
-          x = cx + rangeScale * ((120 + Math.random() * (W - 240)) - cx);
-          y = cy + rangeScale * ((120 + Math.random() * (H - 240)) - cy);
+          const spanX = Math.max(0, W - 2 * m);
+          const spanY = Math.max(0, H - 2 * m);
+          const rx = m + (spanX > 0 ? Math.random() * spanX : 0);
+          const ry = m + (spanY > 0 ? Math.random() * spanY : 0);
+          x = cx + rangeScale * (rx - cx);
+          y = cy + rangeScale * (ry - cy);
           lastRandomJump = time;
         }
       }
       else if (routines[current] === 'Random 2') {
         if (time - lastR2Change > 2.1 / speed) {
-          r2TargetX = cx + rangeScale * ((120 + Math.random() * (W - 240)) - cx);
-          r2TargetY = cy + rangeScale * ((120 + Math.random() * (H - 240)) - cy);
+          const spanX = Math.max(0, W - 2 * m);
+          const spanY = Math.max(0, H - 2 * m);
+          const rx = m + (spanX > 0 ? Math.random() * spanX : 0);
+          const ry = m + (spanY > 0 ? Math.random() * spanY : 0);
+          r2TargetX = cx + rangeScale * (rx - cx);
+          r2TargetY = cy + rangeScale * (ry - cy);
           lastR2Change = time;
         }
         const framesEq = dtClamped * 60;
         const k = 1 - Math.pow(0.78, framesEq);
         x += (r2TargetX - x) * k;
         y += (r2TargetY - y) * k;
+      }
+
+      if (routines[current] !== 'Horizontal Saccades' && routines[current] !== 'Vertical Saccades') {
+        x = Math.min(W - m, Math.max(m, x));
+        y = Math.min(H - m, Math.max(m, y));
       }
     }
 
