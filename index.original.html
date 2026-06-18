@@ -8,13 +8,9 @@
     /* Desktop layout (default) — matches pre–mobile-tweak version */
     body { margin: 0; background: #08080c; overflow: hidden; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
     canvas { display: block; isolation: isolate; }
-    #ballLayer { position: fixed; inset: 0; pointer-events: none; }
     #top-right {
       position: absolute; top: 25px; right: 30px; color: #ccc;
       font-size: 20px; z-index: 10; letter-spacing: 0.02em;
-    }
-    @media (max-width: 1100px) {
-      #top-right { display: none; }
     }
     #left-sliders {
       position: absolute; bottom: 50px; left: 50px; display: flex; flex-direction: column; gap: 35px; z-index: 10;
@@ -51,14 +47,13 @@
     #top-left > span,
     .top-meta > span,
     .top-color-row,
-    #routine-row,
-    #bg-row {
+    #routine-row {
       display: inline-flex;
       align-items: center;
       gap: 8px;
     }
-    #routine-row, #bg-row { gap: 10px; }
-    #routine-row label, #bg-row label { margin: 0; line-height: 1; }
+    #routine-row { gap: 10px; }
+    #routine-row label { margin: 0; line-height: 1; }
     select#routineSelect {
       background: rgba(40,40,52,0.95); color: #e8e8ee; border: 1px solid rgba(255,255,255,0.12);
       font-size: 14px; line-height: 1.2;
@@ -69,7 +64,7 @@
       box-sizing: border-box;
       cursor: pointer;
     }
-    select#dotColor, select#bgColor {
+    select#dotColor {
       background: rgba(40,40,52,0.95); color: #e8e8ee; border: 1px solid rgba(255,255,255,0.12);
       font-size: 14px; line-height: 1.2;
       padding: 8px 12px;
@@ -78,14 +73,6 @@
       box-sizing: border-box;
       cursor: pointer;
     }
-    /* Readable controls when a light background (cream) is selected. */
-    body.light-bg #top-left,
-    body.light-bg #top-left > span,
-    body.light-bg #top-right { color: #2b2b32; }
-    body.light-bg #left-sliders label { color: #2b2b32; }
-    body.light-bg #routine-row label,
-    body.light-bg #bg-row label { color: #5a5a52 !important; }
-    body.light-bg input[type="range"] { background: rgba(0,0,0,0.14); }
     #pause-overlay {
       position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
       pointer-events: none; z-index: 20; font-size: clamp(28px, 5vw, 44px); font-weight: 700;
@@ -224,7 +211,6 @@
 </head>
 <body>
   <canvas id="game"></canvas>
-  <canvas id="ballLayer"></canvas>
   <div id="top-left">
     <button type="button" class="ghost" id="pauseBtn" aria-label="Pause" title="Pause / resume">⏸</button>
     <button type="button" class="ghost" id="helpBtn" aria-label="Shortcuts" title="Shortcuts">?</button>
@@ -240,16 +226,6 @@
     <div id="routine-row">
       <label for="routineSelect" style="margin:0;color:#888;font-size:13px">Routine</label>
       <select id="routineSelect" aria-label="Choose routine"></select>
-    </div>
-    <div id="bg-row">
-      <label for="bgColor" style="margin:0;color:#888;font-size:13px">Background</label>
-      <select id="bgColor" aria-label="Background color">
-        <option value="dark" selected>Dark</option>
-        <option value="blue">Soft blue</option>
-        <option value="green">Muted green</option>
-        <option value="cream">Cream</option>
-        <option value="burgundy">Burgundy</option>
-      </select>
     </div>
   </div>
   <div id="top-right"><span id="routineName">Circle</span> · Speed <span id="speedDisplay">2.0</span> · Range <span id="rangeDisplay">100</span>%</div>
@@ -282,14 +258,15 @@
   </div>
   <script>
     const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d', { alpha: false });
-    const ballCanvas = document.getElementById('ballLayer');
-    const ballCtx = ballCanvas.getContext('2d', { alpha: true });
+    const ctx = canvas.getContext('2d', {
+      alpha: false,
+      desynchronized: true
+    });
     let W = window.innerWidth;
     let H = window.innerHeight;
     let dpr = 1;
 
-    let bgCanvas = null;
+    /** Pre-rasterized ball (device px). Blitting avoids per-frame arc AA “swimming” that reads as a trail. */
     let ballSprite = null;
     let ballSpritePx = 0;
     let ballSpriteSl = 0;
@@ -312,94 +289,71 @@
     let vDirection = 1;
     let lastRandomJump = 0;
     let lastR2Change = 0;
-    /* Sphere base colors. Each renders as a fully shaded ball with specular highlight,
-       core body color, terminator shadow and a soft rim/ambient bounce light. */
-    const spherePalettes = {
-      red:   { base: [228, 36, 36] },
-      amber: { base: [255, 176, 48] },
-      cyan:  { base: [44, 206, 255] },
-      white: { base: [238, 240, 248] }
-    };
-
-    function mix(a, b, t) {
-      return [
-        Math.round(a[0] + (b[0] - a[0]) * t),
-        Math.round(a[1] + (b[1] - a[1]) * t),
-        Math.round(a[2] + (b[2] - a[2]) * t)
-      ];
-    }
-    const rgb = c => 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
-    const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
-
     function rebuildBallSprite() {
       if (!ballSprite) ballSprite = document.createElement('canvas');
-      const pad = 2;
-      const cssL = 2 * dotSize + 2 * pad;
-      ballSpriteSl = cssL;
-      ballSpritePx = Math.max(8, Math.round(cssL * dpr));
+      const pad = 4;
+      const targetL = 2 * dotSize + 2 * pad;
+      ballSpritePx = Math.max(12, Math.round(targetL * dpr));
+      ballSpriteSl = ballSpritePx / dpr;
       ballSprite.width = ballSprite.height = ballSpritePx;
+      const sctx = ballSprite.getContext('2d', { alpha: false });
+      sctx.imageSmoothingEnabled = false;
 
-      const sctx = ballSprite.getContext('2d', { alpha: true });
-      sctx.clearRect(0, 0, ballSpritePx, ballSpritePx);
+      const palettes = {
+        red: { outer: [216, 20, 20], inner: [255, 255, 255] },
+        amber: { outer: [255, 170, 40], inner: [255, 255, 255] },
+        cyan: { outer: [40, 210, 255], inner: [255, 255, 255] },
+        white: { outer: [248, 248, 252], inner: [22, 22, 30] }
+      };
+      const pal = palettes[dotPaletteKey] || palettes.red;
+      const [or, og, ob] = pal.outer;
+      const [ir, ig, ib] = pal.inner;
 
-      const cx = ballSpritePx / 2;
-      const cy = ballSpritePx / 2;
-      const R = dotSize * dpr;
+      const w = ballSpritePx;
+      const rDev = Math.max(2, Math.round(dotSize * dpr));
+      const irDev = Math.min(rDev - 1, Math.max(1, Math.round(dotSize * 0.48 * dpr)));
+      const r2 = rDev * rDev;
+      const ir2 = irDev * irDev;
+      const scx = w * 0.5;
+      const scy = w * 0.5;
 
-      const pal = spherePalettes[dotPaletteKey] || spherePalettes.red;
-      const base = pal.base;
-      const isWhite = dotPaletteKey === 'white';
+      const img = sctx.createImageData(w, w);
+      const d = img.data;
+      const n = w * w * 4;
+      for (let i = 0; i < n; i += 4) {
+        d[i] = 8;
+        d[i + 1] = 8;
+        d[i + 2] = 12;
+        d[i + 3] = 255;
+      }
 
-      // Glossy sphere with a lifted shadow side (lighter terminator) so the dark
-      // hemisphere doesn't read as a "shadow following" the ball during motion.
-      const highlight = mix(base, [255, 255, 255], isWhite ? 0.50 : 0.72);
-      const midHi     = mix(base, [255, 255, 255], 0.16);
-      const shadow    = mix(base, [0, 0, 0], isWhite ? 0.26 : 0.40);
-      const deepEdge  = mix(base, [0, 0, 0], isWhite ? 0.38 : 0.54);
+      const x0 = Math.max(0, Math.floor(scx - rDev - 1));
+      const x1 = Math.min(w - 1, Math.ceil(scx + rDev + 1));
+      const y0 = Math.max(0, Math.floor(scy - rDev - 1));
+      const y1 = Math.min(w - 1, Math.ceil(scy + rDev + 1));
 
-      // Light comes from upper-left.
-      const lx = cx - R * 0.34;
-      const ly = cy - R * 0.34;
-
-      // 1) Main body: smooth gradient from lit side to terminator.
-      sctx.save();
-      sctx.beginPath();
-      sctx.arc(cx, cy, R, 0, Math.PI * 2);
-      sctx.clip();
-
-      const body = sctx.createRadialGradient(lx, ly, R * 0.05, cx, cy, R * 1.2);
-      body.addColorStop(0.0, rgb(highlight));
-      body.addColorStop(0.20, rgb(midHi));
-      body.addColorStop(0.56, rgb(base));
-      body.addColorStop(0.84, rgb(shadow));
-      body.addColorStop(1.0, rgb(deepEdge));
-      sctx.fillStyle = body;
-      sctx.fillRect(0, 0, ballSpritePx, ballSpritePx);
-
-      // 2) Ambient bounce / rim light on the shadow side for a rounded, premium look.
-      const rim = sctx.createRadialGradient(
-        cx + R * 0.55, cy + R * 0.6, R * 0.1,
-        cx + R * 0.55, cy + R * 0.6, R * 0.95
-      );
-      const rimCol = mix(base, [255, 255, 255], isWhite ? 0.2 : 0.45);
-      rim.addColorStop(0.0, rgba(rimCol, isWhite ? 0.16 : 0.28));
-      rim.addColorStop(0.5, rgba(rimCol, 0.0));
-      sctx.fillStyle = rim;
-      sctx.fillRect(0, 0, ballSpritePx, ballSpritePx);
-      sctx.restore();
-
-      // 3) Specular hotspot — the premium glossy "glow".
-      sctx.save();
-      sctx.beginPath();
-      sctx.arc(cx, cy, R, 0, Math.PI * 2);
-      sctx.clip();
-      const spec = sctx.createRadialGradient(lx, ly, 0, lx, ly, R * 0.5);
-      spec.addColorStop(0.0, rgba([255, 255, 255], isWhite ? 0.8 : 0.9));
-      spec.addColorStop(0.25, rgba([255, 255, 255], 0.32));
-      spec.addColorStop(1.0, rgba([255, 255, 255], 0.0));
-      sctx.fillStyle = spec;
-      sctx.fillRect(0, 0, ballSpritePx, ballSpritePx);
-      sctx.restore();
+      for (let py = y0; py <= y1; py++) {
+        const fy = py + 0.5 - scy;
+        const fy2 = fy * fy;
+        let row = py * w * 4;
+        for (let px = x0; px <= x1; px++) {
+          const fx = px + 0.5 - scx;
+          const dist2 = fx * fx + fy2;
+          const b = row + px * 4;
+          if (dist2 <= ir2) {
+            d[b] = ir;
+            d[b + 1] = ig;
+            d[b + 2] = ib;
+            d[b + 3] = 255;
+          } else if (dist2 <= r2) {
+            d[b] = or;
+            d[b + 1] = og;
+            d[b + 2] = ob;
+            d[b + 3] = 255;
+          }
+        }
+      }
+      sctx.putImageData(img, 0, 0);
     }
 
     /** Half-size of on-canvas ball sprite in CSS px; keep motion within [m, W-m] / [m, H-m]. */
@@ -411,43 +365,13 @@
       dpr = Math.min(window.devicePixelRatio || 1, 2.5);
       W = window.innerWidth;
       H = window.innerHeight;
-      const cw = Math.max(1, Math.floor(W * dpr));
-      const ch = Math.max(1, Math.floor(H * dpr));
-      canvas.style.width = ballCanvas.style.width = W + 'px';
-      canvas.style.height = ballCanvas.style.height = H + 'px';
-      canvas.width = ballCanvas.width = cw;
-      canvas.height = ballCanvas.height = ch;
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      canvas.width = Math.max(1, Math.floor(W * dpr));
+      canvas.height = Math.max(1, Math.floor(H * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ballCtx.setTransform(1, 0, 0, 1, 0, 0);
-      rebuildBackground();
+      ctx.imageSmoothingEnabled = false;
       rebuildBallSprite();
-    }
-
-    /* Background presets, each a subtle center→edge radial vignette for depth. */
-    const bgPalettes = {
-      dark:     { inner: '#0c0c14', mid: '#08080c', outer: '#050507', light: false },
-      blue:     { inner: '#1b2742', mid: '#141d31', outer: '#0b1220', light: false },
-      green:    { inner: '#1b2d23', mid: '#13201a', outer: '#0b1510', light: false },
-      cream:    { inner: '#f6eddc', mid: '#ece0c9', outer: '#dccfb1', light: true },
-      burgundy: { inner: '#3d1623', mid: '#2c0f18', outer: '#1b090f', light: false }
-    };
-    let bgKey = 'dark';
-
-    function rebuildBackground() {
-      if (!bgCanvas) bgCanvas = document.createElement('canvas');
-      bgCanvas.width = canvas.width;
-      bgCanvas.height = canvas.height;
-      const bctx = bgCanvas.getContext('2d');
-      const p = bgPalettes[bgKey] || bgPalettes.dark;
-      const g = bctx.createRadialGradient(
-        bgCanvas.width / 2, bgCanvas.height * 0.46, 0,
-        bgCanvas.width / 2, bgCanvas.height * 0.46, Math.max(bgCanvas.width, bgCanvas.height) * 0.75
-      );
-      g.addColorStop(0, p.inner);
-      g.addColorStop(0.55, p.mid);
-      g.addColorStop(1, p.outer);
-      bctx.fillStyle = g;
-      bctx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
     }
 
     const routines = [
@@ -467,7 +391,6 @@
     const pathRangeSlider = document.getElementById('pathRange');
     const routineSelect = document.getElementById('routineSelect');
     const dotColorSelect = document.getElementById('dotColor');
-    const bgColorSelect = document.getElementById('bgColor');
     const pauseOverlay = document.getElementById('pause-overlay');
     const helpPanel = document.getElementById('help-panel');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
@@ -512,11 +435,6 @@
     dotColorSelect.addEventListener('change', () => {
       dotPaletteKey = dotColorSelect.value;
       rebuildBallSprite();
-    });
-    bgColorSelect.addEventListener('change', () => {
-      bgKey = bgColorSelect.value;
-      document.body.classList.toggle('light-bg', !!(bgPalettes[bgKey] && bgPalettes[bgKey].light));
-      rebuildBackground();
     });
     routineSelect.addEventListener('change', () => {
       current = +routineSelect.value;
@@ -601,27 +519,34 @@
       }
     }
 
-    function drawBall(bctx, px, py) {
+    function drawBall(px, py) {
       if (!ballSprite || ballSpritePx <= 0) return;
-      bctx.imageSmoothingEnabled = false;
-      const dx = px * dpr - ballSpritePx / 2;
-      const dy = py * dpr - ballSpritePx / 2;
-      bctx.drawImage(ballSprite, dx, dy);
+      const sl = ballSpriteSl;
+      const dx = Math.round((px - sl / 2) * dpr) / dpr;
+      const dy = Math.round((py - sl / 2) * dpr) / dpr;
+      ctx.drawImage(
+        ballSprite,
+        0, 0, ballSpritePx, ballSpritePx,
+        dx, dy, sl, sl
+      );
     }
 
     function draw() {
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+      ctx.filter = 'none';
       ctx.globalCompositeOperation = 'copy';
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(bgCanvas, 0, 0);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#08080c';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
 
-      ballCtx.clearRect(0, 0, ballCanvas.width, ballCanvas.height);
       if (routines[current] === 'Horizontal Saccades' && hBalls.length > 0) {
-        hBalls.forEach(b => drawBall(ballCtx, b.x, b.y));
+        hBalls.forEach(b => drawBall(b.x, b.y));
       } else if (routines[current] === 'Vertical Saccades' && vBalls.length > 0) {
-        vBalls.forEach(b => drawBall(ballCtx, b.x, b.y));
+        vBalls.forEach(b => drawBall(b.x, b.y));
       } else {
-        drawBall(ballCtx, x, y);
+        drawBall(x, y);
       }
     }
 
